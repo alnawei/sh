@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MYTOOL.SH - Linux 运维工具箱</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #e8eef7;
+        --ink: #171b2e;
+        --muted: #5a6475;
+        --blue: #1677ff;
+        --cyan: #35c8e8;
+        --panel: #080b0e;
+        --panel-border: #1b2833;
+        --code: #2f343d;
+        --shadow: 0 26px 60px rgba(34, 54, 85, 0.22);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 74% 28%, rgba(22, 119, 255, 0.12), transparent 30%),
+          linear-gradient(135deg, #eef4fb 0%, var(--bg) 62%, #dce7f4 100%);
+      }
+
+      main {
+        width: min(1120px, calc(100% - 40px));
+        min-height: 100vh;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: minmax(320px, 0.92fr) minmax(360px, 1fr);
+        gap: 72px;
+        align-items: center;
+        padding: 56px 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .mark {
+        width: 58px;
+        height: 36px;
+        position: relative;
+      }
+
+      .mark span {
+        position: absolute;
+        height: 6px;
+        border-radius: 999px;
+        background: #202846;
+      }
+
+      .mark span:nth-child(1) {
+        width: 42px;
+        right: 0;
+        top: 2px;
+      }
+
+      .mark span:nth-child(2) {
+        width: 52px;
+        right: 0;
+        top: 15px;
+      }
+
+      .mark span:nth-child(3) {
+        width: 36px;
+        right: 0;
+        bottom: 2px;
+      }
+
+      .mark span:nth-child(4) {
+        width: 13px;
+        left: 0;
+        top: 15px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(42px, 7vw, 70px);
+        line-height: 0.92;
+        letter-spacing: 0;
+        font-style: italic;
+        font-weight: 900;
+      }
+
+      h1 b {
+        color: #307fb2;
+      }
+
+      .tagline {
+        margin: 0 0 34px 0;
+        font-size: clamp(21px, 2.3vw, 27px);
+        font-weight: 600;
+      }
+
+      .command {
+        width: min(100%, 460px);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 6px;
+        background: var(--code);
+        box-shadow: 0 12px 28px rgba(20, 24, 31, 0.12);
+      }
+
+      code {
+        flex: 1;
+        min-width: 0;
+        overflow-x: auto;
+        white-space: nowrap;
+        color: #fff;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 15px;
+        scrollbar-width: none;
+      }
+
+      code::-webkit-scrollbar {
+        display: none;
+      }
+
+      button {
+        border: 0;
+        border-radius: 5px;
+        padding: 11px 15px;
+        color: #fff;
+        background: var(--blue);
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      .stats {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-top: 36px;
+        color: #1f2937;
+      }
+
+      .stats strong {
+        font-size: clamp(44px, 6vw, 64px);
+        line-height: 1;
+        color: #1273ff;
+      }
+
+      .terminal {
+        min-height: 514px;
+        padding: 20px 24px 18px;
+        border: 1px solid var(--panel-border);
+        border-radius: 12px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        color: #dce7ef;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 14px;
+        line-height: 1.45;
+        overflow: hidden;
+      }
+
+      .ascii {
+        margin: 0;
+        color: var(--cyan);
+        font-size: clamp(11px, 1.25vw, 15px);
+        line-height: 1.05;
+      }
+
+      .terminal .sub {
+        margin: 10px 0 14px;
+        color: var(--cyan);
+      }
+
+      .menu {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        column-gap: 14px;
+        row-gap: 3px;
+      }
+
+      .menu span:nth-child(odd) {
+        color: var(--cyan);
+        text-align: right;
+      }
+
+      .menu .hot {
+        color: #f7a63b;
+      }
+
+      .line {
+        margin: 12px 0;
+        border-top: 1px dashed rgba(53, 200, 232, 0.55);
+      }
+
+      .prompt {
+        margin-top: 12px;
+      }
+
+      .cursor {
+        display: inline-block;
+        width: 8px;
+        height: 16px;
+        margin-left: 4px;
+        background: #ffad36;
+        vertical-align: -3px;
+        animation: blink 1s steps(2, start) infinite;
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      @media (max-width: 880px) {
+        main {
+          grid-template-columns: 1fr;
+          gap: 38px;
+          padding: 42px 0;
+        }
+
+        .terminal {
+          min-height: 420px;
+        }
+      }
+
+      @media (max-width: 520px) {
+        main {
+          width: min(100% - 28px, 1120px);
+        }
+
+        .command {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        button {
+          width: 100%;
+        }
+
+        .terminal {
+          padding: 16px;
+          font-size: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section aria-label="安装命令">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <h1>MYTOOL<b>.SH</b></h1>
+        </div>
+        <p class="tagline">重新定义 Linux 管理方式</p>
+        <div class="command">
+          <code id="command">bash &lt;(curl -fsSL https://USERNAME.github.io/REPO/toolbox.sh)</code>
+          <button type="button" id="copy">复制</button>
+        </div>
+        <div class="stats">
+          <span>累计装机</span>
+          <strong>0</strong>
+          <span>次</span>
+        </div>
+      </section>
+
+      <section class="terminal" aria-label="终端预览">
+        <pre class="ascii"> __  __ __   __ _____ ___   ___  _       ____  _   _
+|  \/  |\ \ / /|_   _/ _ \ / _ \| |     / ___|| | | |
+| |\/| | \ V /   | || | | | | | | |     \___ \| |_| |
+| |  | |  | |    | || |_| | |_| | |___ _ ___) |  _  |
+|_|  |_|  |_|    |_| \___/ \___/|_____(_)____/|_| |_|</pre>
+        <div class="sub">Linux 运维工具箱 v0.1.0</div>
+        <div class="line"></div>
+        <div class="menu">
+          <span>1.</span><span>系统信息查询</span>
+          <span>2.</span><span>系统更新</span>
+          <span>3.</span><span>系统清理</span>
+          <span>4.</span><span>安装常用工具</span>
+          <span>5.</span><span>安装 Docker</span>
+          <span>6.</span><span>Docker 状态</span>
+          <span>7.</span><span>网络信息</span>
+          <span>8.</span><span>systemd 服务管理</span>
+          <span class="hot">00.</span><span>脚本更新</span>
+          <span>0.</span><span>退出脚本</span>
+        </div>
+        <div class="line"></div>
+        <div class="prompt">请输入你的选择:<span class="cursor"></span></div>
+      </section>
+    </main>
+
+    <script>
+      const copyButton = document.querySelector("#copy");
+      const command = document.querySelector("#command");
+
+      copyButton.addEventListener("click", async () => {
+        const text = command.textContent.trim();
+        await navigator.clipboard.writeText(text);
+        copyButton.textContent = "已复制";
+        window.setTimeout(() => {
+          copyButton.textContent = "复制";
+        }, 1300);
+      });
+    </script>
+  </body>
+</html>
+
