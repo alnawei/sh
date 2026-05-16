@@ -382,12 +382,14 @@ show_default_faketls_menu() {
         echo
         echo "2. 停止"
         echo "3. 重启"
-        echo "0)  退出"
+        echo "4. 卸载此实例"
+        echo "0. 退出"
         echo
         read -p "请输入选项: " opt
         case "$opt" in
             2) stop_service "faketls" ;;
             3) restart_service "faketls" ;;
+            4) uninstall_mtg "faketls" ;;
             0|q|Q) exit 0 ;;
             1|'') ;;
             *) echo "无效选项，请重新输入。" ;;
@@ -401,7 +403,6 @@ main() {
     check_init_system
     check_deps
     ensure_faketls_defaults
-    show_faketls_link_panel
     show_default_faketls_menu
 }
 
