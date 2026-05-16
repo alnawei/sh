@@ -7,6 +7,14 @@ set -e
 BIN_PATH="/usr/local/bin/mtg"
 CONFIG_DIR="/etc/mtg"
 RELEASE_BASE_URL="https://github.com/9seconds/mtg/releases/download/v2.1.7"
+DEFAULT_FAKETLS_DOMAIN="icloud.com"
+DEFAULT_FAKETLS_PORT="18888"
+
+GREEN='\033[32m'
+YELLOW='\033[33m'
+CYAN='\033[36m'
+BOLD='\033[1m'
+RESET='\033[0m'
 
 # --- 功能函数 ---
 
@@ -115,29 +123,58 @@ save_config() {
     config_file="${CONFIG_DIR}/config_${service_type}"
     echo "PORT=${PORT}" > "$config_file"
     echo "SECRET=${SECRET}" >> "$config_file"
+    if [ "$service_type" = "faketls" ] && [ -n "${FAKE_TLS_DOMAIN:-}" ]; then
+        echo "FAKE_TLS_DOMAIN=${FAKE_TLS_DOMAIN}" >> "$config_file"
+    fi
+}
+
+install_mtg_binary_if_missing() {
+    if [ -f "$BIN_PATH" ]; then
+        return 0
+    fi
+
+    ARCH=$(detect_arch)
+    if [ "$ARCH" = "unsupported" ]; then echo "错误: 不支持的系统架构：$(uname -m)"; exit 1; fi
+    echo "检测到系统架构：$ARCH"
+
+    TAR_NAME="mtg-2.1.7-linux-${ARCH}.tar.gz"
+    DOWNLOAD_URL="${RELEASE_BASE_URL}/${TAR_NAME}"
+    TMP_DIR=$(mktemp -d)
+    trap 'rm -rf -- "$TMP_DIR"' EXIT
+    echo "正在下载主程序 ${DOWNLOAD_URL} …"
+    curl -L "${DOWNLOAD_URL}" -o "${TMP_DIR}/${TAR_NAME}"
+    echo "正在解压文件..."
+    tar -xzf "${TMP_DIR}/${TAR_NAME}" -C "${TMP_DIR}"
+
+    MTG_FOUND_PATH=$(find "${TMP_DIR}" -type f -name mtg | head -n 1)
+    if [ -z "$MTG_FOUND_PATH" ]; then echo "错误：未找到 mtg 可执行文件！"; exit 1; fi
+
+    mv "${MTG_FOUND_PATH}" "${BIN_PATH}"
+    chmod +x "${BIN_PATH}"
+    echo "主程序已安装至 ${BIN_PATH}"
+}
+
+apply_faketls_defaults() {
+    FAKE_TLS_DOMAIN="$DEFAULT_FAKETLS_DOMAIN"
+    PORT="$DEFAULT_FAKETLS_PORT"
+    SECRET=$("$BIN_PATH" generate-secret --hex "$FAKE_TLS_DOMAIN")
+}
+
+install_mtg_faketls_auto() {
+    service_type="faketls"
+
+    install_mtg_binary_if_missing
+    apply_faketls_defaults
+    save_config "$service_type"
+    echo "配置已保存至 ${CONFIG_DIR}/config_${service_type} (域名: ${FAKE_TLS_DOMAIN}, 端口: ${PORT})"
+    restart_service "$service_type"
+    echo "[faketls] 实例安装/更新完成！"
 }
 
 install_mtg() {
     service_type="$1"
-    
-    # 只有在主程序不存在时才执行下载
-    if ! [ -f "$BIN_PATH" ]; then
-        ARCH=$(detect_arch)
-        if [ "$ARCH" = "unsupported" ]; then echo "错误: 不支持的系统架构：$(uname -m)"; exit 1; fi
-        echo "检测到系统架构：$ARCH"
 
-        TAR_NAME="mtg-2.1.7-linux-${ARCH}.tar.gz"; DOWNLOAD_URL="${RELEASE_BASE_URL}/${TAR_NAME}"
-        TMP_DIR=$(mktemp -d); trap 'rm -rf -- "$TMP_DIR"' EXIT
-        echo "正在下载主程序 ${DOWNLOAD_URL} …"; curl -L "${DOWNLOAD_URL}" -o "${TMP_DIR}/${TAR_NAME}"
-        echo "正在解压文件..."; tar -xzf "${TMP_DIR}/${TAR_NAME}" -C "${TMP_DIR}"
-        
-        MTG_FOUND_PATH=$(find "${TMP_DIR}" -type f -name mtg | head -n 1)
-        if [ -z "$MTG_FOUND_PATH" ]; then echo "错误：未找到 mtg 可执行文件！"; exit 1; fi
-
-        mv "${MTG_FOUND_PATH}" "${BIN_PATH}"; chmod +x "${BIN_PATH}"
-        echo "主程序已安装至 ${BIN_PATH}"
-    fi
-
+    install_mtg_binary_if_missing
     get_mtg_config "$service_type"
     save_config "$service_type"
     echo "配置已保存至 ${CONFIG_DIR}/config_${service_type}"
@@ -225,6 +262,14 @@ uninstall_mtg() {
     fi
 }
 
+faketls_running_status() {
+    if is_running "faketls"; then
+        printf '%b运行中%b' "${GREEN}${BOLD}" "${RESET}"
+    else
+        printf '%b未运行%b' "${YELLOW}${BOLD}" "${RESET}"
+    fi
+}
+
 show_info() {
     service_type="$1"
     config_file="${CONFIG_DIR}/config_${service_type}"
@@ -245,6 +290,53 @@ show_info() {
         echo "https://t.me/proxy?server=${IPV4}&port=${MTP_PORT}&secret=${MTP_SECRET}"
     else
          echo "无法获取配置信息。"
+    fi
+}
+
+show_faketls_link_panel() {
+    service_type="faketls"
+    config_file="${CONFIG_DIR}/config_${service_type}"
+
+    echo
+    printf '1. ======= [faketls] MTProxy 链接  (状态: '
+    faketls_running_status
+    printf ') =======\n'
+
+    if ! is_running "$service_type"; then
+        return 0
+    fi
+
+    if ! [ -f "$config_file" ]; then
+        echo "错误: [faketls] 未配置。"
+        return 1
+    fi
+
+    # shellcheck disable=SC1090
+    . "$config_file"
+    MTP_PORT=${PORT}
+    MTP_SECRET=${SECRET}
+    IPV4=$(curl -s4 --connect-timeout 2 ip.sb || echo "")
+
+    if [ -n "$IPV4" ] && [ -n "$MTP_PORT" ] && [ -n "$MTP_SECRET" ]; then
+        echo "服务器地址: ${IPV4}"
+        echo "端口:       ${MTP_PORT}"
+        echo "密钥:       ${MTP_SECRET}"
+        echo
+        echo "tg://proxy?server=${IPV4}&port=${MTP_PORT}&secret=${MTP_SECRET}"
+        echo "https://t.me/proxy?server=${IPV4}&port=${MTP_PORT}&secret=${MTP_SECRET}"
+    else
+        echo "无法获取配置信息。"
+    fi
+}
+
+ensure_faketls_defaults() {
+    if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
+        install_mtg_faketls_auto
+        return
+    fi
+
+    if ! is_running "faketls"; then
+        start_service "faketls"
     fi
 }
 
@@ -284,24 +376,23 @@ manage_service() {
     done
 }
 
-show_main_menu() {
-    secured_status="未运行"; if is_running secured; then secured_status="运行中"; fi
-    faketls_status="未运行"; if is_running faketls; then faketls_status="运行中"; fi
-    
-    echo
-    echo "=========== MTProxy 多实例管理脚本 (管理器: ${INIT_SYSTEM}) ==========="
-    echo "1) 管理 [secured] 实例 (状态: ${secured_status})"
-    echo "2) 管理 [faketls] 实例 (状态: ${faketls_status})"
-    echo "-------------------------------------------------"
-    echo "0) 退出脚本"
-    echo
-    read -p "请输入选项: " opt
-    case "$opt" in
-        1) manage_service "secured" ;;
-        2) manage_service "faketls" ;;
-        0|q|Q) exit 0 ;;
-        *) echo "无效选项，请重新输入。" ;;
-    esac
+show_default_faketls_menu() {
+    while true; do
+        show_faketls_link_panel
+        echo
+        echo "2. 停止"
+        echo "3. 重启"
+        echo "0)  退出"
+        echo
+        read -p "请输入选项: " opt
+        case "$opt" in
+            2) stop_service "faketls" ;;
+            3) restart_service "faketls" ;;
+            0|q|Q) exit 0 ;;
+            1|'') ;;
+            *) echo "无效选项，请重新输入。" ;;
+        esac
+    done
 }
 
 # 6. 主流程
@@ -309,10 +400,9 @@ show_main_menu() {
 main() {
     check_init_system
     check_deps
-    
-    while true; do
-        show_main_menu
-    done
+    ensure_faketls_defaults
+    show_faketls_link_panel
+    show_default_faketls_menu
 }
 
 main
