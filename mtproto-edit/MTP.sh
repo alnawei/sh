@@ -115,6 +115,9 @@ save_config() {
     config_file="${CONFIG_DIR}/config_${service_type}"
     echo "PORT=${PORT}" > "$config_file"
     echo "SECRET=${SECRET}" >> "$config_file"
+    if [ "$service_type" = "faketls" ] && [ -n "${FAKE_TLS_DOMAIN:-}" ]; then
+        echo "FAKE_TLS_DOMAIN=${FAKE_TLS_DOMAIN}" >> "$config_file"
+    fi
 }
 
 install_mtg() {
@@ -144,6 +147,7 @@ install_mtg() {
 
     restart_service "$service_type"
     echo "[$service_type] 实例安装/更新完成！"
+    show_info "$service_type"
 }
 
 # 3. 服务管理 (所有函数都接受 service_type 作为参数)
@@ -234,8 +238,11 @@ show_info() {
     . "$config_file"; MTP_PORT=${PORT}; MTP_SECRET=${SECRET}
     
     IPV4=$(curl -s4 --connect-timeout 2 ip.sb || echo "无法获取")
+    running_status="未运行"
+    if is_running "$service_type"; then running_status="运行中"; fi
+
     echo
-    echo "======= [${service_type}] MTProxy 链接 ======="
+    echo "======= [${service_type}] MTProxy 链接  (状态: ${running_status}) ======="
     if [ -n "$IPV4" ] && [ -n "$MTP_PORT" ] && [ -n "$MTP_SECRET" ]; then
         echo "服务器地址: ${IPV4}"
         echo "端口:       ${MTP_PORT}"
@@ -246,6 +253,30 @@ show_info() {
     else
          echo "无法获取配置信息。"
     fi
+}
+
+edit_secret() {
+    service_type="$1"
+    config_file="${CONFIG_DIR}/config_${service_type}"
+
+    if ! [ -f "$config_file" ]; then echo "错误: [$service_type] 未配置。"; return; fi
+
+    . "$config_file"
+    echo
+    echo "当前密钥: ${SECRET}"
+    read -p "请输入新的密钥: " NEW_SECRET
+    NEW_SECRET=$(printf '%s' "$NEW_SECRET" | tr -d '[:space:]')
+
+    if [ -z "$NEW_SECRET" ]; then
+        echo "错误: 密钥不能为空。"
+        return
+    fi
+
+    SECRET="$NEW_SECRET"
+    save_config "$service_type"
+    restart_service "$service_type"
+    echo "[$service_type] 密钥已更新。"
+    show_info "$service_type"
 }
 
 # 5. 菜单系统
@@ -266,7 +297,8 @@ manage_service() {
         echo "   3) 停止"
         echo "   4) 重启"
         echo "   5) 查看链接信息"
-        echo "   6) 卸载此实例"
+        echo "   6) 编辑密钥"
+        echo "   7) 卸载此实例"
         echo "-------------------------------------------------"
         echo "   0) 返回主菜单"
         echo
@@ -277,7 +309,8 @@ manage_service() {
             3) stop_service "$service_type" ;;
             4) restart_service "$service_type" ;;
             5) show_info "$service_type" ;;
-            6) uninstall_mtg "$service_type" ;;
+            6) edit_secret "$service_type" ;;
+            7) uninstall_mtg "$service_type" ;;
             0) return ;;
             *) echo "无效选项，请重新输入。" ;;
         esac
