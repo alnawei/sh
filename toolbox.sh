@@ -7,6 +7,7 @@ PROJECT_NAME="KEJI.SH"
 SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/alnawei/sh/main/toolbox.sh}"
 DEFAULT_MTPROTO_URL="${DEFAULT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto/MTP.sh}"
 EDIT_MTPROTO_URL="${EDIT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto-edit/MTP.sh}"
+DEFAULT_XUI_URL="${DEFAULT_XUI_URL:-https://raw.githubusercontent.com/alnawei/sh/main/x-ui/XUI.sh}"
 
 latest_script_url() {
   local separator="?"
@@ -248,6 +249,10 @@ edit_mtproto() {
   install_mtproto_variant "编辑MTProto" "$EDIT_MTPROTO_URL" "/usr/local/bin/mtp-edit"
 }
 
+default_xui() {
+  install_mtproto_variant "默认x-ui" "$DEFAULT_XUI_URL" "/usr/local/bin/k-x-ui"
+}
+
 bbr_status() {
   local congestion_algorithm
   local queue_algorithm
@@ -379,6 +384,7 @@ show_menu() {
   echo "2.  编辑MTProto"
   echo "3.  系统清理"
   echo "4.  BBR 管理"
+  echo "5.  默认x-ui"
   echo
   echo "00. 更新脚本"
   echo "0.  退出脚本"
@@ -415,6 +421,7 @@ main() {
       2) edit_mtproto ;;
       3) system_clean ;;
       4) bbr_manage ;;
+      5) default_xui ;;
       00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
       *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;

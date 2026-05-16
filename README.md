@@ -8,6 +8,7 @@
 - `index.html`: GitHub Pages 展示页，带安装命令和终端预览。
 - `mtproto/MTP.sh`: 默认 MTProto 模块，主菜单 `1. 默认MTProto` 会调用它。
 - `mtproto-edit/MTP.sh`: 编辑 MTProto 模块，主菜单 `2. 编辑MTProto` 会调用它。
+- `x-ui/XUI.sh`: 默认 x-ui 模块，主菜单 `5. 默认x-ui` 会调用它。
 - `.nojekyll`: 让 GitHub Pages 原样发布静态文件。
 
 ## 菜单功能
@@ -16,6 +17,7 @@
 - `2. 编辑MTProto`: 使用 `mtproto-edit/MTP.sh`。
 - `3. 系统清理`: 清理包管理器缓存、无用依赖和系统 journal 日志，不清理 Docker 容器、镜像、volume、网站、数据库或项目文件。
 - `4. BBR 管理`: 设置 BBR 相关加速模式。
+- `5. 默认x-ui`: 使用 `x-ui/XUI.sh`。
 
 ## 部署到 GitHub
 

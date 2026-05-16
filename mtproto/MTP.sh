@@ -254,16 +254,9 @@ is_last_mtg_instance() {
 uninstall_mtg() {
     service_type="$1"
     config_file="${CONFIG_DIR}/config_${service_type}"
-    cleanup_all=false
-    prompt="您确定要卸载 [$service_type] 实例吗？ [Y/n]: "
-
-    if is_last_mtg_instance "$service_type"; then
-        cleanup_all=true
-        prompt="确定卸载 [$service_type] 实例并删除主程序及此脚本吗？ [Y/n]: "
-    fi
 
     echo
-    read -p "$prompt" confirm
+    read -p "您确定要卸载 [$service_type] 实例吗？ [Y/n]: " confirm
     if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then
         echo "操作已取消。"
         return
@@ -278,12 +271,10 @@ uninstall_mtg() {
     rm -f "$config_file"
     echo "[$service_type] 已卸载。"
 
-    if [ "$cleanup_all" = "true" ]; then
+    if is_last_mtg_instance "$service_type"; then
         rm -f "$BIN_PATH"
-        rm -rf "$CONFIG_DIR"
-        echo "主程序和配置文件目录已删除。"
-        echo "脚本将在1秒后自我删除..."
-        ( sleep 1 && rm -- "$0" ) & exit 0
+        echo "所有实例均已卸载。"
+        echo "主程序已删除: ${BIN_PATH}"
     fi
 }
 
