@@ -180,8 +180,8 @@ apply_tcp_acceleration() {
     return
   fi
 
-  read -r -p "确定启用 ${title} 吗？[y/N] " answer
-  if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+  read -r -p "确定启用 ${title} 吗？[Y/n] " answer
+  if [[ "$answer" =~ ^[Nn]$ ]]; then
     echo "已取消。"
     pause
     return
