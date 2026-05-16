@@ -206,8 +206,8 @@ uninstall_mtg() {
     config_file="${CONFIG_DIR}/config_${service_type}"
     
     echo
-    read -p "您确定要卸载 [$service_type] 实例吗？ (y/N): " confirm
-    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then echo "操作已取消。"; return; fi
+    read -p "您确定要卸载 [$service_type] 实例吗？ [Y/n]: " confirm
+    if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then echo "操作已取消。"; return; fi
 
     echo
     echo "开始卸载 [$service_type] ..."; if is_running "$service_type"; then stop_service "$service_type"; fi
@@ -215,17 +215,10 @@ uninstall_mtg() {
     rm -f "$config_file"
     echo "[$service_type] 已卸载。"
 
-    # 如果两个实例都卸载了，询问是否删除主程序和脚本
     if ! [ -f "${CONFIG_DIR}/config_secured" ] && ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
-        echo
-        read -p "所有实例均已卸载。是否删除主程序和此脚本？ (y/N): " cleanup_confirm
-        if [ "$cleanup_confirm" = "y" ] || [ "$cleanup_confirm" = "Y" ]; then
-            rm -f "$BIN_PATH"
-            rm -rf "$CONFIG_DIR"
-            echo "主程序和配置文件目录已删除。"
-            echo "脚本将在1秒后自我删除..."
-            ( sleep 1 && rm -- "$0" ) & exit 0
-        fi
+        rm -f "$BIN_PATH"
+        echo "所有实例均已卸载。"
+        echo "主程序已删除: ${BIN_PATH}"
     fi
 }
 
