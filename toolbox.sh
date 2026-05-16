@@ -38,6 +38,7 @@ if [[ "${1:-}" == "--install-k" ]]; then
 fi
 
 RED="\033[31m"
+GREEN="\033[32m"
 YELLOW="\033[33m"
 BLUE="\033[34m"
 CYAN="\033[36m"
@@ -47,6 +48,24 @@ RESET="\033[0m"
 pause() {
   echo
   read -r -p "按回车返回菜单..."
+}
+
+run_as_root() {
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+write_root_file() {
+  local path="$1"
+
+  if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    tee "$path" >/dev/null
+  else
+    sudo tee "$path" >/dev/null
+  fi
 }
 
 header() {
@@ -74,12 +93,104 @@ feature_placeholder() {
   pause
 }
 
+bbr_status() {
+  local congestion_algorithm
+  local queue_algorithm
+  local available_algorithms
+
+  congestion_algorithm="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)"
+  queue_algorithm="$(sysctl -n net.core.default_qdisc 2>/dev/null || true)"
+  available_algorithms="$(cat /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null || true)"
+
+  echo "当前 TCP 算法: ${congestion_algorithm:-未知}"
+  echo "当前队列算法: ${queue_algorithm:-未知}"
+  echo "可用 TCP 算法: ${available_algorithms:-未知}"
+}
+
+load_kernel_module() {
+  local module="$1"
+
+  if command -v modprobe >/dev/null 2>&1; then
+    run_as_root modprobe "$module" >/dev/null 2>&1 || true
+  fi
+}
+
+apply_tcp_acceleration() {
+  local title="$1"
+  local congestion="$2"
+  local qdisc="$3"
+
+  header
+  echo -e "${CYAN}${title}${RESET}"
+  echo
+
+  load_kernel_module "tcp_${congestion}"
+  load_kernel_module "sch_${qdisc}"
+
+  if ! grep -qw "$congestion" /proc/sys/net/ipv4/tcp_available_congestion_control 2>/dev/null; then
+    echo -e "${RED}当前内核未检测到 ${congestion} 支持。${RESET}"
+    echo "请先升级到支持 ${congestion} 的 Linux 内核。"
+    pause
+    return
+  fi
+
+  read -r -p "确定启用 ${title} 吗？[y/N] " answer
+  if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+    echo "已取消。"
+    pause
+    return
+  fi
+
+  run_as_root mkdir -p /etc/sysctl.d
+  printf '%s\n' \
+    "net.core.default_qdisc=${qdisc}" \
+    "net.ipv4.tcp_congestion_control=${congestion}" |
+    write_root_file /etc/sysctl.d/99-keji-bbr.conf
+
+  if run_as_root sysctl -w "net.core.default_qdisc=${qdisc}" >/dev/null 2>&1 &&
+    run_as_root sysctl -w "net.ipv4.tcp_congestion_control=${congestion}" >/dev/null 2>&1; then
+    echo -e "${GREEN}${title} 已启用。${RESET}"
+  else
+    echo -e "${RED}配置已写入，但立即生效失败。${RESET}"
+    echo "可能是当前内核不支持 ${qdisc} 队列算法，可以重启后再查看状态。"
+  fi
+
+  echo
+  bbr_status
+  pause
+}
+
+bbr_manage() {
+  while true; do
+    header
+    echo -e "${CYAN}BBR 管理${RESET}"
+    echo "------------------------"
+    bbr_status
+    echo "------------------------"
+    echo "———————————————————————————— 加速启用 ————————————————————————————"
+    echo "20. 使用BBR+FQ加速          21. 使用BBR+FQ_PIE加速"
+    echo "22. 使用BBR+CAKE加速        23. 使用BBRplus+FQ版加速"
+    echo
+    echo "0.  返回主菜单"
+    echo
+    read -r -p "请输入你的选择: " sub_choice
+    case "$sub_choice" in
+      20) apply_tcp_acceleration "BBR+FQ加速" "bbr" "fq" ;;
+      21) apply_tcp_acceleration "BBR+FQ_PIE加速" "bbr" "fq_pie" ;;
+      22) apply_tcp_acceleration "BBR+CAKE加速" "bbr" "cake" ;;
+      23) apply_tcp_acceleration "BBRplus+FQ版加速" "bbrplus" "fq" ;;
+      0) return ;;
+      *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;
+    esac
+  done
+}
+
 show_menu() {
   header
   echo "1.  系统信息查询"
   echo "2.  系统更新"
   echo "3.  系统清理"
-  echo "4.  安装常用工具"
+  echo "4.  BBR 管理"
   echo
   echo "00. 更新脚本"
   echo "0.  退出脚本"
@@ -102,7 +213,7 @@ main() {
       1) feature_placeholder "系统信息查询" ;;
       2) feature_placeholder "系统更新" ;;
       3) feature_placeholder "系统清理" ;;
-      4) feature_placeholder "安装常用工具" ;;
+      4) bbr_manage ;;
       00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
       *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;
