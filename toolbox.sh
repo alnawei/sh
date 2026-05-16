@@ -110,6 +110,99 @@ feature_placeholder() {
   pause
 }
 
+fix_dpkg() {
+  if command -v dpkg >/dev/null 2>&1; then
+    run_as_root dpkg --configure -a >/dev/null 2>&1 || true
+  fi
+}
+
+show_disk_usage() {
+  echo "磁盘占用:"
+  df -h / 2>/dev/null || df -h
+}
+
+clean_journal() {
+  if command -v journalctl >/dev/null 2>&1; then
+    run_as_root journalctl --rotate >/dev/null 2>&1 || true
+    run_as_root journalctl --vacuum-time=1s >/dev/null 2>&1 || true
+    run_as_root journalctl --vacuum-size=500M >/dev/null 2>&1 || true
+  fi
+}
+
+system_clean() {
+  header
+  echo -e "${CYAN}系统清理${RESET}"
+  echo
+  show_disk_usage
+  echo
+  echo "将清理包管理器缓存、无用依赖和系统 journal 日志。"
+  echo "不会删除 Docker 容器、镜像、volume、网站、数据库或项目文件。"
+  echo
+  read -r -p "确定开始清理吗？[Y/n] " answer
+  if [[ "$answer" =~ ^[Nn]$ ]]; then
+    echo "已取消。"
+    pause
+    return
+  fi
+
+  echo
+  echo -e "${CYAN}正在系统清理...${RESET}"
+
+  if command -v dnf >/dev/null 2>&1; then
+    run_as_root rpm --rebuilddb || true
+    run_as_root dnf autoremove -y
+    run_as_root dnf clean all
+    run_as_root dnf makecache || true
+    clean_journal
+  elif command -v yum >/dev/null 2>&1; then
+    run_as_root rpm --rebuilddb || true
+    run_as_root yum autoremove -y || true
+    run_as_root yum clean all
+    run_as_root yum makecache || true
+    clean_journal
+  elif command -v apt >/dev/null 2>&1; then
+    fix_dpkg
+    run_as_root apt autoremove --purge -y
+    run_as_root apt clean -y
+    run_as_root apt autoclean -y
+    clean_journal
+  elif command -v apk >/dev/null 2>&1; then
+    run_as_root apk cache clean || true
+    run_as_root rm -rf /var/cache/apk/*
+    run_as_root find /var/log -type f -delete 2>/dev/null || true
+    run_as_root find /tmp -mindepth 1 -delete 2>/dev/null || true
+  elif command -v pacman >/dev/null 2>&1; then
+    orphans="$(pacman -Qdtq 2>/dev/null || true)"
+    if [[ -n "$orphans" ]]; then
+      run_as_root pacman -Rns --noconfirm $orphans
+    fi
+    run_as_root pacman -Scc --noconfirm
+    clean_journal
+  elif command -v zypper >/dev/null 2>&1; then
+    run_as_root zypper clean --all
+    run_as_root zypper refresh || true
+    clean_journal
+  elif command -v opkg >/dev/null 2>&1; then
+    run_as_root find /var/log -type f -delete 2>/dev/null || true
+    run_as_root find /tmp -mindepth 1 -delete 2>/dev/null || true
+  elif command -v pkg >/dev/null 2>&1; then
+    run_as_root pkg autoremove -y || true
+    run_as_root pkg clean -y
+    run_as_root find /var/log -type f -delete 2>/dev/null || true
+    run_as_root find /tmp -mindepth 1 -delete 2>/dev/null || true
+  else
+    echo -e "${RED}未识别到受支持的包管理器。${RESET}"
+    pause
+    return
+  fi
+
+  echo
+  echo -e "${GREEN}系统清理完成。${RESET}"
+  echo
+  show_disk_usage
+  pause
+}
+
 install_mtproto_variant() {
   local title="$1"
   local source_url="$2"
@@ -320,7 +413,7 @@ main() {
     case "$choice" in
       1) default_mtproto ;;
       2) edit_mtproto ;;
-      3) feature_placeholder "系统清理" ;;
+      3) system_clean ;;
       4) bbr_manage ;;
       00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
