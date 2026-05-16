@@ -234,31 +234,56 @@ is_running() {
 # 4. 辅助功能
 # =================================
 
+is_last_mtg_instance() {
+    service_type="$1"
+    other_type=""
+
+    if [ "$service_type" = "secured" ]; then
+        other_type="faketls"
+    else
+        other_type="secured"
+    fi
+
+    if [ -f "${CONFIG_DIR}/config_${other_type}" ]; then
+        return 1
+    fi
+
+    return 0
+}
+
 uninstall_mtg() {
     service_type="$1"
     config_file="${CONFIG_DIR}/config_${service_type}"
-    
-    echo
-    read -p "您确定要卸载 [$service_type] 实例吗？ (y/N): " confirm
-    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then echo "操作已取消。"; return; fi
+    cleanup_all=false
+    prompt="您确定要卸载 [$service_type] 实例吗？ (y/N): "
+
+    if is_last_mtg_instance "$service_type"; then
+        cleanup_all=true
+        prompt="确定卸载 [$service_type] 实例并删除主程序及此脚本吗？ (y/N): "
+    fi
 
     echo
-    echo "开始卸载 [$service_type] ..."; if is_running "$service_type"; then stop_service "$service_type"; fi
-    
+    read -p "$prompt" confirm
+    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+        echo "操作已取消。"
+        return
+    fi
+
+    echo
+    echo "开始卸载 [$service_type] ..."
+    if is_running "$service_type"; then
+        stop_service "$service_type"
+    fi
+
     rm -f "$config_file"
     echo "[$service_type] 已卸载。"
 
-    # 如果两个实例都卸载了，询问是否删除主程序和脚本
-    if ! [ -f "${CONFIG_DIR}/config_secured" ] && ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
-        echo
-        read -p "所有实例均已卸载。是否删除主程序和此脚本？ (y/N): " cleanup_confirm
-        if [ "$cleanup_confirm" = "y" ] || [ "$cleanup_confirm" = "Y" ]; then
-            rm -f "$BIN_PATH"
-            rm -rf "$CONFIG_DIR"
-            echo "主程序和配置文件目录已删除。"
-            echo "脚本将在1秒后自我删除..."
-            ( sleep 1 && rm -- "$0" ) & exit 0
-        fi
+    if [ "$cleanup_all" = "true" ]; then
+        rm -f "$BIN_PATH"
+        rm -rf "$CONFIG_DIR"
+        echo "主程序和配置文件目录已删除。"
+        echo "脚本将在1秒后自我删除..."
+        ( sleep 1 && rm -- "$0" ) & exit 0
     fi
 }
 
@@ -365,13 +390,42 @@ manage_service() {
     done
 }
 
+change_faketls_secret() {
+    service_type="faketls"
+    config_file="${CONFIG_DIR}/config_${service_type}"
+
+    if ! [ -f "$config_file" ]; then
+        echo "错误: [faketls] 未配置。"
+        return 1
+    fi
+
+    # shellcheck disable=SC1090
+    . "$config_file"
+
+    echo
+    echo "请粘贴新的 MTProxy 密钥:"
+    read -r NEW_SECRET
+    NEW_SECRET=$(printf '%s' "$NEW_SECRET" | tr -d '[:space:]')
+
+    if [ -z "$NEW_SECRET" ]; then
+        echo "错误: 密钥不能为空。"
+        return 1
+    fi
+
+    SECRET="$NEW_SECRET"
+    save_config "$service_type"
+    restart_service "$service_type"
+    echo "[faketls] 密钥已更新。"
+}
+
 render_default_faketls_screen() {
     clear 2>/dev/null || true
     show_faketls_link_panel
     echo
     echo "2. 停止"
     echo "3. 重启"
-    echo "4. 卸载此实例"
+    echo "4. 修改密钥"
+    echo "5. 卸载此实例"
     echo "0. 退出"
 }
 
@@ -389,7 +443,8 @@ show_default_faketls_menu() {
         case "$opt" in
             2) stop_service "faketls" ;;
             3) restart_service "faketls" ;;
-            4)
+            4) change_faketls_secret ;;
+            5)
                 uninstall_mtg "faketls"
                 if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
                     continue
