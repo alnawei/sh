@@ -6,6 +6,16 @@ VERSION="0.1.0"
 PROJECT_NAME="KEJI.SH"
 SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/alnawei/sh/main/toolbox.sh}"
 
+latest_script_url() {
+  local separator="?"
+
+  if [[ "$SCRIPT_URL" == *"?"* ]]; then
+    separator="&"
+  fi
+
+  echo "${SCRIPT_URL}${separator}t=$(date +%s)"
+}
+
 install_k_command() {
   local target="/usr/local/bin/k"
   local tmp
@@ -13,7 +23,12 @@ install_k_command() {
   tmp="$(mktemp)"
   cat >"$tmp" <<EOF
 #!/usr/bin/env bash
-bash <(curl -fsSL "$SCRIPT_URL") "\$@"
+SCRIPT_URL="$SCRIPT_URL"
+separator="?"
+if [[ "\$SCRIPT_URL" == *"?"* ]]; then
+  separator="&"
+fi
+bash <(curl -fsSL -H 'Cache-Control: no-cache' "\${SCRIPT_URL}\${separator}t=\$(date +%s)") "\$@"
 EOF
   chmod +x "$tmp"
 
@@ -231,11 +246,24 @@ show_menu() {
 }
 
 update_script() {
+  local tmp
+
   header
   echo -e "${CYAN}更新脚本${RESET}"
   echo
   install_k_command
-  pause
+  echo
+  echo "正在拉取最新脚本并重新启动..."
+
+  tmp="$(mktemp)"
+  if curl -fsSL -H 'Cache-Control: no-cache' "$(latest_script_url)" -o "$tmp"; then
+    chmod +x "$tmp"
+    exec bash "$tmp"
+  else
+    rm -f "$tmp"
+    echo -e "${RED}拉取最新脚本失败，请稍后重试。${RESET}"
+    pause
+  fi
 }
 
 main() {
