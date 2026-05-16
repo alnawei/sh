@@ -5,6 +5,8 @@ set -Eeuo pipefail
 VERSION="0.1.0"
 PROJECT_NAME="KEJI.SH"
 SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/alnawei/sh/main/toolbox.sh}"
+DEFAULT_MTPROTO_URL="${DEFAULT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto/MTP.sh}"
+EDIT_MTPROTO_URL="${EDIT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto-edit/MTP.sh}"
 
 latest_script_url() {
   local separator="?"
@@ -106,6 +108,51 @@ feature_placeholder() {
   echo
   echo -e "${YELLOW}此功能待添加。${RESET}"
   pause
+}
+
+install_mtproto_variant() {
+  local title="$1"
+  local source_url="$2"
+  local target="$3"
+  local tmp
+
+  header
+  echo -e "${CYAN}${title}${RESET}"
+  echo
+  echo "正在安装/更新 ${title} 脚本..."
+
+  tmp="$(mktemp)"
+  if command -v curl >/dev/null 2>&1; then
+    curl -LfsS "$source_url" -o "$tmp"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "$source_url" -O "$tmp"
+  else
+    echo -e "${RED}缺少 curl 或 wget，无法下载 ${title} 脚本。${RESET}"
+    rm -f "$tmp"
+    pause
+    return
+  fi
+
+  chmod +x "$tmp"
+
+  if [[ -w "$(dirname "$target")" ]]; then
+    mv "$tmp" "$target"
+  else
+    sudo mv "$tmp" "$target"
+  fi
+
+  run_as_root chmod +x "$target"
+  echo -e "${GREEN}${title} 脚本已安装: ${target}${RESET}"
+  echo
+  run_as_root "$target"
+}
+
+default_mtproto() {
+  install_mtproto_variant "默认MTProto" "$DEFAULT_MTPROTO_URL" "/usr/local/bin/mtp"
+}
+
+edit_mtproto() {
+  install_mtproto_variant "编辑MTProto" "$EDIT_MTPROTO_URL" "/usr/local/bin/mtp-edit"
 }
 
 bbr_status() {
@@ -235,8 +282,8 @@ bbr_manage() {
 
 show_menu() {
   header
-  echo "1.  系统信息查询"
-  echo "2.  系统更新"
+  echo "1.  默认MTProto"
+  echo "2.  编辑MTProto"
   echo "3.  系统清理"
   echo "4.  BBR 管理"
   echo
@@ -271,8 +318,8 @@ main() {
     show_menu
     read -r -p "请输入你的选择: " choice
     case "$choice" in
-      1) feature_placeholder "系统信息查询" ;;
-      2) feature_placeholder "系统更新" ;;
+      1) default_mtproto ;;
+      2) edit_mtproto ;;
       3) feature_placeholder "系统清理" ;;
       4) bbr_manage ;;
       00) update_script ;;

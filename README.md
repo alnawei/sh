@@ -6,6 +6,8 @@
 
 - `toolbox.sh`: 终端菜单脚本，用户通过 `curl` 远程执行。
 - `index.html`: GitHub Pages 展示页，带安装命令和终端预览。
+- `mtproto/MTP.sh`: 默认 MTProto 模块，主菜单 `1. 默认MTProto` 会调用它。
+- `mtproto-edit/MTP.sh`: 编辑 MTProto 模块，主菜单 `2. 编辑MTProto` 会调用它。
 - `.nojekyll`: 让 GitHub Pages 原样发布静态文件。
 
 ## 部署到 GitHub
