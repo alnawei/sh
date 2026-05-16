@@ -61,7 +61,7 @@ header() {
 LOGO
   echo -e "${RESET}"
   echo -e "${BLUE}Linux 运维工具箱 v${VERSION}${RESET}"
-  echo -e "${CYAN}命令行输入${gl_huang}k${gl_kjlan}可快速启动脚本${gl_bai}"${RESET}"
+  echo -e "${CYAN}命令行输入 ${YELLOW}${BOLD}k${RESET}${CYAN} 可快速启动脚本${RESET}"
   echo
 }
 
@@ -81,8 +81,17 @@ show_menu() {
   echo "3.  系统清理"
   echo "4.  安装常用工具"
   echo
+  echo "00. 更新脚本"
   echo "0.  退出脚本"
   echo
+}
+
+update_script() {
+  header
+  echo -e "${CYAN}更新脚本${RESET}"
+  echo
+  install_k_command
+  pause
 }
 
 main() {
@@ -94,6 +103,7 @@ main() {
       2) feature_placeholder "系统更新" ;;
       3) feature_placeholder "系统清理" ;;
       4) feature_placeholder "安装常用工具" ;;
+      00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
       *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;
     esac
