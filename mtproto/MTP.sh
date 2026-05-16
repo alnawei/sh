@@ -329,17 +329,6 @@ show_faketls_link_panel() {
     fi
 }
 
-ensure_faketls_defaults() {
-    if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
-        install_mtg_faketls_auto
-        return
-    fi
-
-    if ! is_running "faketls"; then
-        start_service "faketls"
-    fi
-}
-
 # 5. 菜单系统
 # =================================
 
@@ -376,23 +365,39 @@ manage_service() {
     done
 }
 
+render_default_faketls_screen() {
+    clear 2>/dev/null || true
+    show_faketls_link_panel
+    echo
+    echo "2. 停止"
+    echo "3. 重启"
+    echo "4. 卸载此实例"
+    echo "0. 退出"
+}
+
 show_default_faketls_menu() {
     while true; do
-        show_faketls_link_panel
-        echo
-        echo "2. 停止"
-        echo "3. 重启"
-        echo "4. 卸载此实例"
-        echo "0. 退出"
+        if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
+            install_mtg_faketls_auto
+        elif ! is_running "faketls"; then
+            start_service "faketls"
+        fi
+
+        render_default_faketls_screen
         echo
         read -p "请输入选项: " opt
         case "$opt" in
             2) stop_service "faketls" ;;
             3) restart_service "faketls" ;;
-            4) uninstall_mtg "faketls" ;;
+            4)
+                uninstall_mtg "faketls"
+                if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
+                    continue
+                fi
+                ;;
             0|q|Q) exit 0 ;;
             1|'') ;;
-            *) echo "无效选项，请重新输入。" ;;
+            *) echo "无效选项，请重新输入。"; sleep 1 ;;
         esac
     done
 }
@@ -402,7 +407,6 @@ show_default_faketls_menu() {
 main() {
     check_init_system
     check_deps
-    ensure_faketls_defaults
     show_default_faketls_menu
 }
 
