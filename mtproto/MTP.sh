@@ -323,7 +323,7 @@ show_faketls_link_panel() {
     config_file="${CONFIG_DIR}/config_${service_type}"
 
     echo
-    printf '1. ======= [faketls] MTProxy 链接  (状态: '
+    printf '======= [faketls] MTProxy 链接  (状态: '
     faketls_running_status
     printf ') =======\n'
 
@@ -422,6 +422,7 @@ render_default_faketls_screen() {
     clear 2>/dev/null || true
     show_faketls_link_panel
     echo
+    echo "1. 安装实例"
     echo "2. 停止"
     echo "3. 重启"
     echo "4. 修改密钥"
@@ -430,28 +431,22 @@ render_default_faketls_screen() {
 }
 
 show_default_faketls_menu() {
-    while true; do
-        if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
-            install_mtg_faketls_auto
-        elif ! is_running "faketls"; then
-            start_service "faketls"
-        fi
+    if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
+        install_mtg_faketls_auto
+    fi
 
+    while true; do
         render_default_faketls_screen
         echo
         read -p "请输入选项: " opt
         case "$opt" in
+            1) install_mtg_faketls_auto ;;
             2) stop_service "faketls" ;;
             3) restart_service "faketls" ;;
             4) change_faketls_secret ;;
-            5)
-                uninstall_mtg "faketls"
-                if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
-                    continue
-                fi
-                ;;
+            5) uninstall_mtg "faketls" ;;
             0|q|Q) exit 0 ;;
-            1|'') ;;
+            '') ;;
             *) echo "无效选项，请重新输入。"; sleep 1 ;;
         esac
     done
