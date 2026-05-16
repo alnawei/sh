@@ -107,6 +107,37 @@ bbr_status() {
   echo "可用 TCP 算法: ${available_algorithms:-未知}"
 }
 
+current_acceleration_name() {
+  local congestion="$1"
+  local qdisc="$2"
+
+  case "${congestion}+${qdisc}" in
+    bbr+fq) echo "BBR+FQ加速" ;;
+    bbr+fq_pie) echo "BBR+FQ_PIE加速" ;;
+    bbr+cake) echo "BBR+CAKE加速" ;;
+    bbrplus+fq) echo "BBRplus+FQ版加速" ;;
+    *) echo "${congestion:-未知}+${qdisc:-未知}" ;;
+  esac
+}
+
+bbr_summary() {
+  local congestion_algorithm
+  local queue_algorithm
+  local acceleration_name
+
+  congestion_algorithm="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)"
+  queue_algorithm="$(sysctl -n net.core.default_qdisc 2>/dev/null || true)"
+  acceleration_name="$(current_acceleration_name "$congestion_algorithm" "$queue_algorithm")"
+
+  if [[ "$congestion_algorithm" == "bbr" || "$congestion_algorithm" == "bbrplus" ]]; then
+    echo -e "BBR 状态: ${GREEN}已启动${RESET}"
+    echo "当前加速: ${acceleration_name}"
+  else
+    echo -e "BBR 状态: ${YELLOW}未启动${RESET}"
+    echo "当前加速: ${acceleration_name}"
+  fi
+}
+
 load_kernel_module() {
   local module="$1"
 
@@ -168,17 +199,19 @@ bbr_manage() {
     bbr_status
     echo "------------------------"
     echo "———————————————————————————— 加速启用 ————————————————————————————"
-    echo "20. 使用BBR+FQ加速          21. 使用BBR+FQ_PIE加速"
-    echo "22. 使用BBR+CAKE加速        23. 使用BBRplus+FQ版加速"
+    echo "1.  使用BBR+FQ加速          2.  使用BBR+FQ_PIE加速"
+    echo "3.  使用BBR+CAKE加速        4.  使用BBRplus+FQ版加速"
+    echo "——————————————————————————————————————————————————————————————————"
+    bbr_summary
     echo
     echo "0.  返回主菜单"
     echo
     read -r -p "请输入你的选择: " sub_choice
     case "$sub_choice" in
-      20) apply_tcp_acceleration "BBR+FQ加速" "bbr" "fq" ;;
-      21) apply_tcp_acceleration "BBR+FQ_PIE加速" "bbr" "fq_pie" ;;
-      22) apply_tcp_acceleration "BBR+CAKE加速" "bbr" "cake" ;;
-      23) apply_tcp_acceleration "BBRplus+FQ版加速" "bbrplus" "fq" ;;
+      1) apply_tcp_acceleration "BBR+FQ加速" "bbr" "fq" ;;
+      2) apply_tcp_acceleration "BBR+FQ_PIE加速" "bbr" "fq_pie" ;;
+      3) apply_tcp_acceleration "BBR+CAKE加速" "bbr" "cake" ;;
+      4) apply_tcp_acceleration "BBRplus+FQ版加速" "bbrplus" "fq" ;;
       0) return ;;
       *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;
     esac
