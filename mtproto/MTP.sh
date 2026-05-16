@@ -255,16 +255,16 @@ uninstall_mtg() {
     service_type="$1"
     config_file="${CONFIG_DIR}/config_${service_type}"
     cleanup_all=false
-    prompt="您确定要卸载 [$service_type] 实例吗？ (y/N): "
+    prompt="您确定要卸载 [$service_type] 实例吗？ [Y/n]: "
 
     if is_last_mtg_instance "$service_type"; then
         cleanup_all=true
-        prompt="确定卸载 [$service_type] 实例并删除主程序及此脚本吗？ (y/N): "
+        prompt="确定卸载 [$service_type] 实例并删除主程序及此脚本吗？ [Y/n]: "
     fi
 
     echo
     read -p "$prompt" confirm
-    if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+    if [ "$confirm" = "n" ] || [ "$confirm" = "N" ]; then
         echo "操作已取消。"
         return
     fi
