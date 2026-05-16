@@ -1,4 +1,4 @@
-# MYTOOL.SH
+# KEJI.SH
 
 一个可以部署到 GitHub Pages 的 Linux Bash 工具箱模板。
 
@@ -32,6 +32,18 @@ bash <(curl -fsSL https://USERNAME.github.io/REPO/toolbox.sh)
 ```
 
 把 `USERNAME` 改成你的 GitHub 用户名，把 `REPO` 改成仓库名。
+
+安装 `k` 快捷命令：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/alnawei/sh/main/toolbox.sh) --install-k
+```
+
+安装后可以直接运行：
+
+```bash
+k
+```
 
 ## 使用自定义域名
 
@@ -81,4 +93,3 @@ python3 -m http.server 8080
 ```text
 http://localhost:8080
 ```
-
