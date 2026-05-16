@@ -431,10 +431,6 @@ render_default_faketls_screen() {
 }
 
 show_default_faketls_menu() {
-    if ! [ -f "${CONFIG_DIR}/config_faketls" ]; then
-        install_mtg_faketls_auto
-    fi
-
     while true; do
         render_default_faketls_screen
         echo
