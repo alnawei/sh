@@ -61,7 +61,7 @@ header() {
 LOGO
   echo -e "${RESET}"
   echo -e "${BLUE}Linux 运维工具箱 v${VERSION}${RESET}"
-  echo -e "${CYAN}命令行输入 k 可快速启动脚本${RESET}"
+  echo -e "${CYAN}命令行输入${gl_huang}k${gl_kjlan}可快速启动脚本${gl_bai}"${RESET}"
   echo
 }
 
