@@ -8,6 +8,7 @@ SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/alnawei/sh/main/tool
 DEFAULT_MTPROTO_URL="${DEFAULT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto/MTP.sh}"
 EDIT_MTPROTO_URL="${EDIT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto-edit/MTP.sh}"
 DEFAULT_XUI_URL="${DEFAULT_XUI_URL:-https://raw.githubusercontent.com/alnawei/sh/main/x-ui/XUI.sh}"
+MTPROTO_2_URL="${MTPROTO_2_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto-2/MTP.sh}"
 
 latest_script_url() {
   local separator="?"
@@ -253,6 +254,10 @@ default_xui() {
   install_mtproto_variant "默认x-ui" "$DEFAULT_XUI_URL" "/usr/local/bin/k-x-ui"
 }
 
+mtproto_2() {
+  install_mtproto_variant "MTProto-2" "$MTPROTO_2_URL" "/usr/local/bin/mtp-2"
+}
+
 bbr_status() {
   local congestion_algorithm
   local queue_algorithm
@@ -385,6 +390,7 @@ show_menu() {
   echo "3.  系统清理"
   echo "4.  BBR 管理"
   echo "5.  默认x-ui"
+  echo "6.  MTProto-2"
   echo
   echo "00. 更新脚本"
   echo "0.  退出脚本"
@@ -422,6 +428,7 @@ main() {
       3) system_clean ;;
       4) bbr_manage ;;
       5) default_xui ;;
+      6) mtproto_2 ;;
       00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
       *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;
