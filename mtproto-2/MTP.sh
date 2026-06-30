@@ -259,7 +259,7 @@ list_all_instances() {
         echo -e "           ${YELLOW}暂无任何配置的实例${RESET}"
     else
         printf "%-10s | %-15s | %s\n" "端口" "状态" "伪装域名"
-        printf "------------------------------------------\n"
+        printf "%s\n" "------------------------------------------"
         for conf in "${CONFIG_DIR}"/config_*; do
             [ -e "$conf" ] || continue
             . "$conf"
