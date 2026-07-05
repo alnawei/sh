@@ -9,6 +9,7 @@ import threading
 import subprocess
 from functools import wraps
 from flask import Flask, request, jsonify, session, send_from_directory
+from datetime import datetime
 
 # ================= 核心配置区 =================
 DB_FILE = "/root/mg_core.db"
@@ -114,44 +115,109 @@ def get_iptables_bytes(port):
         pass
     return 0
 
-# ================= 后台监控守护线程 =================
+# ================= 后台监控守护线程 (主控管家) =================
 
-def traffic_monitor_loop():
+def master_monitor_loop():
+    """后台独立线程：每隔 60 秒轮询一次，处理流量统计、超限熔断、到期阻断、周期重置"""
     while True:
         try:
-            # 1. 读操作：不加写锁，快速获取后马上关闭连接
+            # 获取当前时间（格式化用于比对）
+            now = datetime.now()
+            current_date_str = now.strftime('%Y-%m-%d')
+            current_month_str = now.strftime('%Y-%m')
+            
+            # 1. 读操作：获取所有节点
             conn = get_db()
             c = conn.cursor()
-            c.execute("SELECT port, limit_gb, status FROM mg_nodes")
+            c.execute("SELECT * FROM mg_nodes")
             nodes = [dict(row) for row in c.fetchall()]
             conn.close()
             
-            # 2. 遍历检查并更新
+            # 2. 遍历处理每个节点
             for node in nodes:
                 port = node['port']
                 limit_bytes = int(node['limit_gb'] * 1024 * 1024 * 1024)
+                status = node['status']
+                reset_cycle = node['reset_cycle']
+                last_reset = node['last_reset_date']
+                expiry_date_str = node['expiry_date']
+                
+                # 获取实时物理流量
                 current_bytes = get_iptables_bytes(port)
                 
-                # 3. 写操作：严格用锁包裹从开启到提交的完整过程
-                with db_lock:
-                    write_conn = get_db()
-                    write_cursor = write_conn.cursor()
+                # --- 核心状态机逻辑 ---
+                need_update = False
+                new_status = status
+                new_used_bytes = current_bytes
+                new_last_reset = last_reset
+                
+                # 【动作 A】: 检查周期重置 (每日/每月)
+                if reset_cycle == 'daily' and last_reset != current_date_str:
+                    remove_iptables_rules(port)
+                    setup_iptables_monitor(port)
+                    new_used_bytes = 0
+                    new_last_reset = current_date_str
+                    need_update = True
                     
-                    write_cursor.execute("UPDATE mg_nodes SET used_bytes=? WHERE port=?", (current_bytes, port))
-                    
-                    # 触发熔断
-                    if current_bytes >= limit_bytes and node['status'] == 'running':
-                        block_port(port)
-                        run_executor('stop', port)
-                        write_cursor.execute("UPDATE mg_nodes SET status='blocked' WHERE port=?", (port,))
-                        print(f"[Monitor] Port {port} quota exceeded, blocked.")
+                elif reset_cycle == 'monthly' and last_reset[:7] != current_month_str:
+                    remove_iptables_rules(port)
+                    setup_iptables_monitor(port)
+                    new_used_bytes = 0
+                    new_last_reset = current_date_str
+                    need_update = True
+
+                # 【动作 B】: 检查是否到期 (Expiry Date)
+                is_expired = False
+                if expiry_date_str:
+                    try:
+                        expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d %H:%M:%S')
+                        if now > expiry_date:
+                            is_expired = True
+                    except:
+                        pass # 日期格式错误则忽略
                         
-                    write_conn.commit()
-                    write_conn.close()
-                    
+                if is_expired and status == 'running':
+                    block_port(port)
+                    run_executor('stop', port)
+                    new_status = 'expired'
+                    need_update = True
+                    print(f"[Monitor] Port {port} expired, blocked.")
+
+                # 【动作 C】: 检查是否超流量 (Quota Exceeded)
+                # 注意：如果刚才触发了重置，这里的 current_bytes 就不能用原来的了
+                check_bytes = new_used_bytes if need_update else current_bytes
+                
+                if not is_expired and check_bytes >= limit_bytes and status == 'running':
+                    block_port(port)
+                    run_executor('stop', port)
+                    new_status = 'blocked'
+                    need_update = True
+                    print(f"[Monitor] Port {port} quota exceeded, blocked.")
+
+                # 【动作 D】: 写入数据库 (如果有任何状态、重置或流量变更)
+                # 即便没有状态变更，只要流量有增长也需要更新
+                if need_update or current_bytes > node['used_bytes']:
+                    with db_lock:
+                        try:
+                            write_conn = get_db()
+                            write_cursor = write_conn.cursor()
+                            
+                            # 更新流量、状态、最后重置时间
+                            write_cursor.execute('''
+                                UPDATE mg_nodes 
+                                SET used_bytes=?, status=?, last_reset_date=? 
+                                WHERE port=?
+                            ''', (new_used_bytes, new_status, new_last_reset, port))
+                            
+                            write_conn.commit()
+                            write_conn.close()
+                        except Exception as db_e:
+                            print(f"[Monitor DB Write Error] {db_e}")
+                            
         except Exception as e:
-            print(f"[Monitor Error] {e}")
+            print(f"[Monitor Master Error] {e}")
         
+        # 休息 60 秒后再次全面巡检
         time.sleep(60)
 
 # ================= Flask 鉴权与 API 路由 =================
@@ -311,12 +377,17 @@ def reset_traffic():
 def index():
     return send_from_directory('.', 'index.html')
 
+
 if __name__ == '__main__':
     init_db()
     
-    monitor_thread = threading.Thread(target=traffic_monitor_loop)
+    # 将原来的 monitor_thread 替换为新的 master_monitor_loop
+    monitor_thread = threading.Thread(target=master_monitor_loop)
     monitor_thread.daemon = True
     monitor_thread.start()
+    
+    print(f"[MG-Panel] Starting private console on port {WEB_PORT}...")
+    app.run(host='0.0.0.0', port=WEB_PORT, debug=False, threaded=True)
     
     print(f"[MG-Panel] Starting private console on port {WEB_PORT}...")
     app.run(host='0.0.0.0', port=WEB_PORT, debug=False, threaded=True)
