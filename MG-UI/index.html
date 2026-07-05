@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MG Console</title>
+    <!-- Vue3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Element Plus 核心 CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
+    <!-- Element Plus 暗黑主题变量 -->
+    <link rel="stylesheet" href="https://unpkg.com/element-plus/theme-chalk/dark/css-vars.css">
+    <!-- Element Plus 组件库 -->
+    <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
+    <!-- Element Plus 图标库 -->
+    <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+    <!-- Axios -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: #141414; /* 极致暗黑底色 */
+            color: #CFD3DC;
+            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        }
+        #app { min-height: 100vh; display: flex; flex-direction: column; }
+        [v-cloak] { display: none; }
+
+        /* 登录页样式 */
+        .login-wrapper { display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .login-card { width: 380px; background: #1D1E1F; border: 1px solid #363637; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+        .login-header { text-align: center; font-size: 24px; font-weight: bold; color: #409EFF; padding: 30px 0 10px 0; letter-spacing: 2px; }
+
+        /* 控制台主框架样式 */
+        .dashboard { padding: 30px 20px; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #363637; }
+        .brand { font-size: 22px; font-weight: 600; color: #409EFF; display: flex; align-items: center; gap: 8px; }
+        .toolbar { margin-bottom: 20px; display: flex; gap: 10px; }
+
+        /* 表格内自定义样式 */
+        .el-table { --el-table-border-color: #363637; --el-table-bg-color: #1D1E1F; --el-table-tr-bg-color: #1D1E1F; --el-table-header-bg-color: #262728; }
+        .traffic-box { display: flex; flex-direction: column; gap: 6px; }
+        .traffic-text { font-size: 12px; color: #A3A6AD; }
+        .link-tag { cursor: pointer; transition: 0.3s; }
+        .link-tag:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div id="app" v-cloak>
+        <!-- ================= 登录页面 ================= -->
+        <div v-if="!isLoggedIn" class="login-wrapper">
+            <el-card class="login-card" shadow="never">
+                <div class="login-header">🛡️ MG Console</div>
+                <div style="padding: 20px;">
+                    <el-form @keyup.enter="handleLogin">
+                        <el-form-item>
+                            <el-input v-model="loginForm.username" placeholder="Username" :prefix-icon="UserIcon" size="large"></el-input>
+                        </el-form-item>
+                        <el-form-item>
+                            <el-input v-model="loginForm.password" type="password" placeholder="Password" :prefix-icon="LockIcon" size="large" show-password></el-input>
+                        </el-form-item>
+                        <el-button type="primary" size="large" style="width: 100%; margin-top: 10px;" :loading="loading" @click="handleLogin">
+                            LOGIN
+                        </el-button>
+                    </el-form>
+                </div>
+            </el-card>
+        </div>
+
+        <!-- ================= 主控面板 ================= -->
+        <div v-else class="dashboard">
+            <!-- 顶部导航 -->
+            <div class="nav-header">
+                <div class="brand">
+                    <el-icon><Platform /></el-icon>
+                    MG 私有节点管控中心
+                </div>
+                <div>
+                    <el-button type="danger" plain size="small" @click="handleLogout">
+                        <el-icon><Switch-Button /></el-icon>&nbsp;退出登录
+                    </el-button>
+                </div>
+            </div>
+
+            <!-- 工具栏 -->
+            <div class="toolbar">
+                <el-button type="primary" @click="addDialogVisible = true">
+                    <el-icon><Plus /></el-icon>&nbsp;添加入站规则
+                </el-button>
+                <el-button type="info" plain @click="fetchNodes" :loading="loading">
+                    <el-icon><Refresh /></el-icon>&nbsp;刷新状态
+                </el-button>
+            </div>
+
+            <!-- 节点数据列表 -->
+            <el-table :data="nodes" style="width: 100%; border-radius: 8px; overflow: hidden;" v-loading="loading">
+                <el-table-column prop="port" label="入站端口" width="100" align="center">
+                    <template #default="scope">
+                        <strong>{{ scope.row.port }}</strong>
+                    </template>
+                </el-table-column>
+                
+                <el-table-column label="节点状态" width="120" align="center">
+                    <template #default="scope">
+                        <el-tag v-if="scope.row.status === 'running'" type="success" effect="dark">🟢 运行中</el-tag>
+                        <el-tag v-else-if="scope.row.status === 'stopped'" type="info" effect="dark">⚪ 已停止</el-tag>
+                        <el-tag v-else-if="scope.row.status === 'blocked'" type="danger" effect="dark">🔴 超限阻断</el-tag>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="流量统计 (物理层防作弊)" min-width="250">
+                    <template #default="scope">
+                        <div class="traffic-box">
+                            <el-progress 
+                                :percentage="calcPercentage(scope.row.used_gb, scope.row.limit_gb)" 
+                                :color="customColors" 
+                                :stroke-width="10" 
+                                text-inside>
+                            </el-progress>
+                            <div class="traffic-text">
+                                已用: {{ scope.row.used_gb }} GB &nbsp;/&nbsp; 限额: {{ scope.row.limit_gb }} GB
+                            </div>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="直连链接" width="120" align="center">
+                    <template #default="scope">
+                        <el-tooltip content="点击复制配置链接" placement="top">
+                            <el-tag class="link-tag" type="warning" @click="copyLink(scope.row.link)">
+                                <el-icon><Document-Copy /></el-icon> 复制链接
+                            </el-tag>
+                        </el-tooltip>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="操作" width="280" align="center" fixed="right">
+                    <template #default="scope">
+                        <!-- 启停开关 -->
+                        <el-button 
+                            v-if="scope.row.status === 'running'" 
+                            type="warning" size="small" 
+                            @click="toggleNode(scope.row.port, 'stop')">
+                            暂停
+                        </el-button>
+                        <el-button 
+                            v-else 
+                            type="success" size="small" 
+                            @click="toggleNode(scope.row.port, 'start')">
+                            启动
+                        </el-button>
+                        
+                        <!-- 流量清零 -->
+                        <el-button type="primary" plain size="small" @click="resetTraffic(scope.row.port)">
+                            清零流量
+                        </el-button>
+
+                        <!-- 彻底删除 -->
+                        <el-popconfirm title="确定彻底删除该节点与底层阻断规则吗？" @confirm="deleteNode(scope.row.port)" confirm-button-text="删除" cancel-button-text="取消" confirm-button-type="danger">
+                            <template #reference>
+                                <el-button type="danger" size="small">删除</el-button>
+                            </template>
+                        </el-popconfirm>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+
+        <!-- ================= 添加节点弹窗 ================= -->
+        <el-dialog v-model="addDialogVisible" title="➕ 新增 MG 入站规则" width="400px" center custom-class="dark-dialog">
+            <el-form :model="addForm" label-width="120px" label-position="left">
+                <el-form-item label="监听端口">
+                    <el-input-number v-model="addForm.port" :min="1000" :max="65535" style="width: 100%;"></el-input-number>
+                </el-form-item>
+                <el-form-item label="月流量限额 (GB)">
+                    <el-input-number v-model="addForm.limit_gb" :min="0.1" :step="10" style="width: 100%;"></el-input-number>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <span class="dialog-footer">
+                    <el-button @click="addDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="addNode" :loading="actionLoading">确认创建</el-button>
+                </span>
+            </template>
+        </el-dialog>
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, onMounted } = Vue;
+        const { ElMessage } = ElementPlus;
+
+        // Axios 拦截器处理未登录
+        axios.interceptors.response.use(response => response, error => {
+            if (error.response && error.response.status === 401) {
+                appVue.isLoggedIn = false;
+                if(appVue.isAppMounted) {
+                    ElMessage.error('身份验证已过期，请重新登录');
+                }
+            }
+            return Promise.reject(error);
+        });
+
+        const app = createApp({
+            setup() {
+                // 图标引入
+                const UserIcon = ElementPlusIconsVue.User;
+                const LockIcon = ElementPlusIconsVue.Lock;
+
+                // 状态
+                const isAppMounted = ref(false);
+                const isLoggedIn = ref(false);
+                const loading = ref(false);
+                const actionLoading = ref(false);
+                
+                const loginForm = reactive({ username: '', password: '' });
+                const addDialogVisible = ref(false);
+                const addForm = reactive({ port: 20000, limit_gb: 50.0 });
+                const nodes = ref([]);
+
+                // 进度条颜色分级：绿 -> 黄 -> 红
+                const customColors = [
+                    { color: '#67C23A', percentage: 60 },
+                    { color: '#E6A23C', percentage: 90 },
+                    { color: '#F56C6C', percentage: 100 }
+                ];
+
+                const calcPercentage = (used, limit) => {
+                    if (!limit || limit <= 0) return 0;
+                    let p = Math.round((used / limit) * 100);
+                    return p > 100 ? 100 : p;
+                };
+
+                // API 调用封装
+                const fetchNodes = async () => {
+                    loading.value = true;
+                    try {
+                        const res = await axios.get('/mg-api/nodes');
+                        if (res.data.success) {
+                            nodes.value = res.data.data;
+                            isLoggedIn.value = true;
+                        }
+                    } catch (e) {
+                        // 401 interceptor handles it
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const handleLogin = async () => {
+                    if(!loginForm.username || !loginForm.password) return;
+                    loading.value = true;
+                    try {
+                        const res = await axios.post('/mg-api/login', loginForm);
+                        if (res.data.success) {
+                            ElMessage.success('登录成功');
+                            isLoggedIn.value = true;
+                            fetchNodes();
+                        }
+                    } catch (e) {
+                        ElMessage.error(e.response?.data?.msg || '登录失败');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const handleLogout = async () => {
+                    await axios.post('/mg-api/logout');
+                    isLoggedIn.value = false;
+                    nodes.value = [];
+                    ElMessage.success('已安全退出');
+                };
+
+                const addNode = async () => {
+                    actionLoading.value = true;
+                    try {
+                        const res = await axios.post('/mg-api/node/add', addForm);
+                        if (res.data.success) {
+                            ElMessage.success(res.data.msg);
+                            addDialogVisible.value = false;
+                            fetchNodes();
+                        } else {
+                            ElMessage.error(res.data.msg);
+                        }
+                    } catch (e) {
+                        ElMessage.error('创建异常');
+                    } finally {
+                        actionLoading.value = false;
+                    }
+                };
+
+                const toggleNode = async (port, action) => {
+                    try {
+                        const res = await axios.post('/mg-api/node/toggle', { port, action });
+                        if (res.data.success) {
+                            ElMessage.success(res.data.msg);
+                            fetchNodes();
+                        } else {
+                            ElMessage.error(res.data.msg);
+                        }
+                    } catch (e) {
+                        ElMessage.error('操作失败');
+                    }
+                };
+
+                const resetTraffic = async (port) => {
+                    try {
+                        const res = await axios.post('/mg-api/node/reset_traffic', { port });
+                        if (res.data.success) {
+                            ElMessage.success(`端口 ${port} 流量已重置清零`);
+                            fetchNodes();
+                        }
+                    } catch (e) {
+                        ElMessage.error('重置失败');
+                    }
+                };
+
+                const deleteNode = async (port) => {
+                    try {
+                        const res = await axios.post('/mg-api/node/delete', { port });
+                        if (res.data.success) {
+                            ElMessage.success(res.data.msg);
+                            fetchNodes();
+                        }
+                    } catch (e) {
+                        ElMessage.error('删除失败');
+                    }
+                };
+
+                const copyLink = (text) => {
+                    if(navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(text).then(() => {
+                            ElMessage.success('代理链接已复制到剪贴板');
+                        });
+                    } else {
+                        // 降级处理
+                        let textArea = document.createElement("textarea");
+                        textArea.value = text;
+                        textArea.style.position = "fixed";
+                        textArea.style.left = "-999999px";
+                        document.body.appendChild(textArea);
+                        textArea.focus();
+                        textArea.select();
+                        try {
+                            document.execCommand('copy');
+                            ElMessage.success('代理链接已复制到剪贴板');
+                        } catch (err) {
+                            ElMessage.error('复制失败，请手动选择复制');
+                        }
+                        textArea.remove();
+                    }
+                };
+
+                onMounted(() => {
+                    isAppMounted.value = true;
+                    fetchNodes(); // 自动尝试获取数据，验证 Session
+                });
+
+                return {
+                    isAppMounted, isLoggedIn, loading, actionLoading,
+                    loginForm, addDialogVisible, addForm, nodes, customColors,
+                    UserIcon, LockIcon,
+                    handleLogin, handleLogout, fetchNodes, addNode,
+                    toggleNode, resetTraffic, deleteNode, copyLink, calcPercentage
+                };
+            }
+        });
+
+        app.use(ElementPlus);
+        // 全局注册所有 Icon
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+            app.component(key, component);
+        }
+        
+        const appVue = app.mount('#app');
+    </script>
+</body>
+</html>
