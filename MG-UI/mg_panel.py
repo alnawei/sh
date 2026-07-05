@@ -41,14 +41,34 @@ def init_db():
     with db_lock:
         conn = get_db()
         c = conn.cursor()
-        # status: running, stopped, blocked
+        
+        # 1. 创建核心表（包含生产级新字段）
         c.execute('''CREATE TABLE IF NOT EXISTS mg_nodes
                      (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                       port INTEGER UNIQUE, 
                       secret TEXT, 
                       limit_gb REAL, 
                       used_bytes REAL DEFAULT 0,
-                      status TEXT DEFAULT 'stopped')''')
+                      status TEXT DEFAULT 'stopped',
+                      reset_cycle TEXT DEFAULT 'never',
+                      expiry_date TEXT DEFAULT '',
+                      last_reset_date TEXT DEFAULT '')''')
+        
+        # 2. 字段平滑升级检测 (兼容旧版本数据库)
+        c.execute("PRAGMA table_info(mg_nodes)")
+        existing_columns = [col['name'] for col in c.fetchall()]
+        
+        migrations = {
+            "reset_cycle": "ALTER TABLE mg_nodes ADD COLUMN reset_cycle TEXT DEFAULT 'never'",
+            "expiry_date": "ALTER TABLE mg_nodes ADD COLUMN expiry_date TEXT DEFAULT ''",
+            "last_reset_date": "ALTER TABLE mg_nodes ADD COLUMN last_reset_date TEXT DEFAULT ''"
+        }
+        
+        for col_name, alter_sql in migrations.items():
+            if col_name not in existing_columns:
+                c.execute(alter_sql)
+                print(f"[DB Upgrade] Added new column: {col_name}")
+                
         conn.commit()
         conn.close()
 
