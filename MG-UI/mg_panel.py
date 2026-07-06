@@ -11,7 +11,7 @@ import subprocess
 import calendar
 from datetime import datetime
 from functools import wraps
-from flask import Flask, request, jsonify, session, send_from_directory
+from flask import Flask, request, jsonify, session, send_from_directory, redirect, url_for
 
 # ================= 核心配置区 =================
 DB_FILE = "/root/mg_core.db"
@@ -29,6 +29,21 @@ app = Flask(__name__)
 app.secret_key = FLASK_SECRET
 db_lock = threading.Lock()
 
+# ================= Flask 鉴权中间件 =================
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            # 如果是 API 接口请求，返回 JSON 401 报错
+            if request.path.startswith('/mg-api/'):
+                return jsonify({"success": False, "msg": "未授权访问"}), 401
+            # 如果是普通的页面访问请求，重定向到首页要求登录
+            else:
+                return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # ================= 辅助函数：自然月递增 =================
 def add_months(sourcedate, months):
     """精准自然月递增（自动处理 31 号到 28/30 号的容错进位）"""
@@ -38,14 +53,13 @@ def add_months(sourcedate, months):
     day = min(sourcedate.day, calendar.monthrange(year, month)[1])
     return sourcedate.replace(year=year, month=month, day=day)
 
-# ================= 基础组件与数据库 =================
 
+# ================= 基础组件与数据库 =================
 def get_db():
     conn = sqlite3.connect(DB_FILE, timeout=20.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
-# 1. 在 init_db 函数的 migrations 字典里补充 alerted_flags
 def init_db():
     with db_lock:
         conn = get_db()
@@ -81,54 +95,7 @@ def init_db():
         conn.close()
 
 
-# 2. 替换设置 API 路由
-@app.route('/mg-api/settings/bot', methods=['GET'])
-@login_required
-def get_bot_settings():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT key, value FROM mg_settings WHERE key IN ('bot_token', 'admin_id', 'node_traffic_alert_pct', 'server_traffic_alert_gb')")
-    rows = c.fetchall()
-    conn.close()
-    
-    data = {'bot_token': '', 'admin_id': '', 'node_traffic_alert_pct': '', 'server_traffic_alert_gb': ''}
-    for row in rows: data[row['key']] = row['value']
-    
-    try: data['node_traffic_alert_pct'] = float(data['node_traffic_alert_pct']) if data['node_traffic_alert_pct'] else ''
-    except: data['node_traffic_alert_pct'] = ''
-    
-    try: data['server_traffic_alert_gb'] = float(data['server_traffic_alert_gb']) if data['server_traffic_alert_gb'] else ''
-    except: data['server_traffic_alert_gb'] = ''
-    
-    return jsonify({"success": True, "data": data})
-
-@app.route('/mg-api/settings/bot', methods=['POST'])
-@login_required
-def set_bot_settings():
-    data = request.json
-    bot_token = str(data.get('bot_token', '')).strip()
-    admin_id = str(data.get('admin_id', '')).strip()
-    node_traffic_alert_pct = str(data.get('node_traffic_alert_pct', '')).strip()
-    server_traffic_alert_gb = str(data.get('server_traffic_alert_gb', '')).strip()
-    
-    with db_lock:
-        conn = get_db()
-        c = conn.cursor()
-        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('bot_token', ?)", (bot_token,))
-        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('admin_id', ?)", (admin_id,))
-        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('node_traffic_alert_pct', ?)", (node_traffic_alert_pct,))
-        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('server_traffic_alert_gb', ?)", (server_traffic_alert_gb,))
-        conn.commit()
-        conn.close()
-        
-    subprocess.run("pkill -f mg_bot.py", shell=True)
-    if bot_token:
-        subprocess.run("nohup python3 /root/mg_bot.py > /root/mg_bot.log 2>&1 &", shell=True)
-        
-    return jsonify({"success": True, "msg": "Bot 配置与预警系统已保存，后台进程已重启生效"})
-
 # ================= 底层 Shell & 看门狗探活 =================
-
 def run_executor(command, port, secret=""):
     try:
         cmd = ["bash", EXECUTOR_SCRIPT, command, str(port)]
@@ -177,8 +144,8 @@ def is_process_alive(port):
             return s.connect_ex(('127.0.0.1', port)) == 0
     except: return False
 
-# ================= 守护线程：全能主控管家 =================
 
+# ================= 守护线程：全能主控管家 =================
 def master_monitor_loop():
     while True:
         try:
@@ -249,15 +216,8 @@ def master_monitor_loop():
         except: pass
         time.sleep(60)
 
-# ================= Flask 鉴权与 API 路由 =================
 
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'): return jsonify({"success": False, "msg": "未授权访问"}), 401
-        return f(*args, **kwargs)
-    return decorated_function
-
+# ================= Flask 业务 API 路由 =================
 @app.route('/mg-api/login', methods=['POST'])
 def login():
     data = request.json
@@ -282,7 +242,7 @@ def get_nodes():
     
     server_ip = os.popen("curl -s4 --connect-timeout 2 ip.sb || echo '127.0.0.1'").read().strip()
     for node in nodes:
-        node['server_ip'] = server_ip   # <--- 请在后端补充这一行
+        node['server_ip'] = server_ip
         node['used_gb'] = round(node['used_bytes'] / (1024**3), 3)
         node['link'] = f"tg://proxy?server={server_ip}&port={node['port']}&secret={node['secret']}"
     return jsonify({"success": True, "data": nodes})
@@ -295,7 +255,6 @@ def add_node():
     limit_gb = float(data.get('limit_gb'))
     reset_cycle = data.get('reset_cycle', 'never')
     
-    # 严格遵循：如果前端传空字符串，代表永久有效；如果压根没传这个 key，后端给予自然月 1 个月默认值。
     expiry_date = data.get('expiry_date')
     if expiry_date is None:
         expiry_date = add_months(datetime.now(), 1).strftime('%Y-%m-%d %H:%M:%S')
@@ -366,7 +325,7 @@ def edit_node():
 @app.route('/mg-api/node/renew', methods=['POST'])
 @login_required
 def renew_node():
-    """【新增】一键续费路由：支持自然月递增"""
+    """一键续费路由：支持自然月递增"""
     data = request.json
     port = int(data.get('port'))
     months = int(data.get('months', 1))
@@ -382,7 +341,6 @@ def renew_node():
     secret = row['secret']
     now = datetime.now()
 
-    # 判定续费起点：如果是未过期，从原到期日累加；如果已过期/无到期日，从现在开始累加
     base_date = now
     if current_expiry_str:
         try:
@@ -399,7 +357,6 @@ def renew_node():
             write_conn = get_db(); write_cursor = write_conn.cursor()
             write_cursor.execute("UPDATE mg_nodes SET expiry_date=? WHERE port=?", (new_expiry_str, port))
             
-            # 如果是被过期阻断的，续费后重置为 running
             if status == 'expired':
                 write_cursor.execute("UPDATE mg_nodes SET status='running' WHERE port=?", (port,))
                 status = 'running'
@@ -409,7 +366,6 @@ def renew_node():
         except sqlite3.OperationalError as e:
             return jsonify({"success": False, "msg": f"数据库忙: {e}"})
 
-    # 拉起刚被复活的进程
     if status == 'running':
         unblock_port(port)
         run_executor('start', port, secret)
@@ -471,39 +427,49 @@ def reset_traffic():
 def get_bot_settings():
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT key, value FROM mg_settings WHERE key IN ('bot_token', 'admin_id')")
+    c.execute("SELECT key, value FROM mg_settings WHERE key IN ('bot_token', 'admin_id', 'node_traffic_alert_pct', 'server_traffic_alert_gb')")
     rows = c.fetchall()
     conn.close()
     
-    data = {'bot_token': '', 'admin_id': ''}
+    data = {'bot_token': '', 'admin_id': '', 'node_traffic_alert_pct': '', 'server_traffic_alert_gb': ''}
     for row in rows: data[row['key']] = row['value']
+    
+    try: data['node_traffic_alert_pct'] = float(data['node_traffic_alert_pct']) if data['node_traffic_alert_pct'] else ''
+    except: data['node_traffic_alert_pct'] = ''
+    
+    try: data['server_traffic_alert_gb'] = float(data['server_traffic_alert_gb']) if data['server_traffic_alert_gb'] else ''
+    except: data['server_traffic_alert_gb'] = ''
+    
     return jsonify({"success": True, "data": data})
 
 @app.route('/mg-api/settings/bot', methods=['POST'])
 @login_required
 def set_bot_settings():
     data = request.json
-    bot_token = data.get('bot_token', '').strip()
-    admin_id = data.get('admin_id', '').strip()
+    bot_token = str(data.get('bot_token', '')).strip()
+    admin_id = str(data.get('admin_id', '')).strip()
+    node_traffic_alert_pct = str(data.get('node_traffic_alert_pct', '')).strip()
+    server_traffic_alert_gb = str(data.get('server_traffic_alert_gb', '')).strip()
     
     with db_lock:
         conn = get_db()
         c = conn.cursor()
-        # REPLACE INTO：有则更新，无则插入
         c.execute("REPLACE INTO mg_settings (key, value) VALUES ('bot_token', ?)", (bot_token,))
         c.execute("REPLACE INTO mg_settings (key, value) VALUES ('admin_id', ?)", (admin_id,))
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('node_traffic_alert_pct', ?)", (node_traffic_alert_pct,))
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('server_traffic_alert_gb', ?)", (server_traffic_alert_gb,))
         conn.commit()
         conn.close()
         
-    # 保存配置后，直接杀死旧的机器人进程，如果有 token 则拉起新的
     subprocess.run("pkill -f mg_bot.py", shell=True)
     if bot_token:
         subprocess.run("nohup python3 /root/mg_bot.py > /root/mg_bot.log 2>&1 &", shell=True)
         
-    return jsonify({"success": True, "msg": "Bot 配置已保存，后台进程已重启生效"})
+    return jsonify({"success": True, "msg": "Bot 配置与预警系统已保存，后台进程已重启生效"})
 
 @app.route('/')
-def index(): return send_from_directory('.', 'index.html')
+def index(): 
+    return send_from_directory('.', 'index.html')
 
 if __name__ == '__main__':
     init_db()
