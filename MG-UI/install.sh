@@ -9,8 +9,9 @@ echo "=========================================="
 apt-get update
 apt-get install -y curl wget python3 python3-pip iptables sqlite3 tar daemon
 
-# 2. 安装 Flask (适配最新的 Debian/Ubuntu 系统)
+# 2. 安装 Python 依赖 (适配最新的 Debian/Ubuntu 系统)
 pip3 install flask --break-system-packages 2>/dev/null || pip3 install flask
+pip3 install aiogram --break-system-packages 2>/dev/null || pip3 install aiogram
 
 # 3. 下载核心程序，并进行“私有化改名” (改名为 mg)
 BIN_PATH="/usr/local/bin/mg"
@@ -31,7 +32,7 @@ if [ ! -f "$BIN_PATH" ]; then
     rm -rf /tmp/mg_core*
 fi
 
-# 4. 从 GitHub 仓库拉取三大核心模块
+# 4. 从 GitHub 仓库拉取四大核心模块
 echo "正在拉取控制台架构文件..."
 # 指向你的 MG-UI 目录
 BASE_URL="https://raw.githubusercontent.com/alnawei/sh/main/MG-UI"
@@ -39,13 +40,17 @@ BASE_URL="https://raw.githubusercontent.com/alnawei/sh/main/MG-UI"
 curl -sL "$BASE_URL/mg_panel.py" -o /root/mg_panel.py
 curl -sL "$BASE_URL/mg_executor.sh" -o /root/mg_executor.sh
 curl -sL "$BASE_URL/index.html" -o /root/index.html
+curl -sL "$BASE_URL/mg_bot.py" -o /root/mg_bot.py
 
 # 赋予执行权限
 chmod +x /root/mg_panel.py
 chmod +x /root/mg_executor.sh
+chmod +x /root/mg_bot.py
 
 # 5. 配置 Systemd 守护进程 (实现后台运行和开机自启)
 echo "配置系统守护进程..."
+
+# Web 面板服务
 cat > /etc/systemd/system/mg-panel.service <<EOF
 [Unit]
 Description=MG Web Panel
@@ -64,13 +69,36 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
+# Telegram Bot 服务
+cat > /etc/systemd/system/mg-bot.service <<EOF
+[Unit]
+Description=MG Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/mg_bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # 6. 启动服务
 systemctl daemon-reload
+
 systemctl enable mg-panel
 systemctl restart mg-panel
 
+systemctl enable mg-bot
+systemctl restart mg-bot
+
 echo "=========================================="
-echo "✅ 安装完成！后台服务已自动拉起。"
+echo "✅ 安装完成！后台服务与机器人管家已自动拉起。"
 echo "👉 请在浏览器访问: http://$(curl -s4 ip.sb):8888"
 echo " (请确保服务器和 1Panel 防火墙已放行 8888 端口)"
+echo " (请登录 Web 控制台，在顶部「Bot设置」中填入 Token 激活机器人)"
 echo "=========================================="
