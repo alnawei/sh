@@ -198,7 +198,7 @@
 
         <!-- Telegram Bot 设置弹窗 -->
         <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="500px" center custom-class="dark-dialog">
-            <el-form :model="botForm" label-width="160px" label-position="left">
+            <el-form :model="botForm" label-position="top">
                 
                 <el-form-item label="机器人密钥 (Bot Token)">
                     <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token" style="width: 100%;"></el-input>
