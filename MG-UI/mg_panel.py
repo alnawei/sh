@@ -45,6 +45,7 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+# 1. 在 init_db 函数的 migrations 字典里补充 alerted_flags
 def init_db():
     with db_lock:
         conn = get_db()
@@ -61,23 +62,70 @@ def init_db():
                       expiry_date TEXT DEFAULT '',
                       last_reset_date TEXT DEFAULT '')''')
         
-                      
         c.execute("PRAGMA table_info(mg_nodes)")
         existing_columns = [col['name'] for col in c.fetchall()]
         
         migrations = {
             "reset_cycle": "ALTER TABLE mg_nodes ADD COLUMN reset_cycle TEXT DEFAULT 'never'",
             "expiry_date": "ALTER TABLE mg_nodes ADD COLUMN expiry_date TEXT DEFAULT ''",
-            "last_reset_date": "ALTER TABLE mg_nodes ADD COLUMN last_reset_date TEXT DEFAULT ''"
+            "last_reset_date": "ALTER TABLE mg_nodes ADD COLUMN last_reset_date TEXT DEFAULT ''",
+            # 【新增】防轰炸标记存储
+            "alerted_flags": "ALTER TABLE mg_nodes ADD COLUMN alerted_flags TEXT DEFAULT '{}'"
         }
         
         for col_name, alter_sql in migrations.items():
             if col_name not in existing_columns:
                 c.execute(alter_sql)
-        # 【新增】创建设置表
         c.execute('''CREATE TABLE IF NOT EXISTS mg_settings (key TEXT PRIMARY KEY, value TEXT)''')        
         conn.commit()
         conn.close()
+
+
+# 2. 替换设置 API 路由
+@app.route('/mg-api/settings/bot', methods=['GET'])
+@login_required
+def get_bot_settings():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT key, value FROM mg_settings WHERE key IN ('bot_token', 'admin_id', 'node_traffic_alert_pct', 'server_traffic_alert_gb')")
+    rows = c.fetchall()
+    conn.close()
+    
+    data = {'bot_token': '', 'admin_id': '', 'node_traffic_alert_pct': '', 'server_traffic_alert_gb': ''}
+    for row in rows: data[row['key']] = row['value']
+    
+    try: data['node_traffic_alert_pct'] = float(data['node_traffic_alert_pct']) if data['node_traffic_alert_pct'] else ''
+    except: data['node_traffic_alert_pct'] = ''
+    
+    try: data['server_traffic_alert_gb'] = float(data['server_traffic_alert_gb']) if data['server_traffic_alert_gb'] else ''
+    except: data['server_traffic_alert_gb'] = ''
+    
+    return jsonify({"success": True, "data": data})
+
+@app.route('/mg-api/settings/bot', methods=['POST'])
+@login_required
+def set_bot_settings():
+    data = request.json
+    bot_token = str(data.get('bot_token', '')).strip()
+    admin_id = str(data.get('admin_id', '')).strip()
+    node_traffic_alert_pct = str(data.get('node_traffic_alert_pct', '')).strip()
+    server_traffic_alert_gb = str(data.get('server_traffic_alert_gb', '')).strip()
+    
+    with db_lock:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('bot_token', ?)", (bot_token,))
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('admin_id', ?)", (admin_id,))
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('node_traffic_alert_pct', ?)", (node_traffic_alert_pct,))
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('server_traffic_alert_gb', ?)", (server_traffic_alert_gb,))
+        conn.commit()
+        conn.close()
+        
+    subprocess.run("pkill -f mg_bot.py", shell=True)
+    if bot_token:
+        subprocess.run("nohup python3 /root/mg_bot.py > /root/mg_bot.log 2>&1 &", shell=True)
+        
+    return jsonify({"success": True, "msg": "Bot 配置与预警系统已保存，后台进程已重启生效"})
 
 # ================= 底层 Shell & 看门狗探活 =================
 
