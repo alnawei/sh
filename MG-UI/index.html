@@ -244,7 +244,7 @@
                 const detailsDialogVisible = ref(false);
                 const currentDetailNode = ref({});
 
-                const form = reactive({ port: 20000, limit_gb: 1000.0, reset_cycle: 'never', expiry_date: '', secret: '' });
+                const form = reactive({ port: 20000, limit_gb: 1000.0, reset_cycle: 'monthly', expiry_date: '', secret: '' });
                 const nodes = ref([]);
 
                 const customColors = [{ color: '#67C23A', percentage: 60 }, { color: '#E6A23C', percentage: 90 }, { color: '#F56C6C', percentage: 100 }];
@@ -289,7 +289,7 @@
                     isEditMode.value = false;
                     form.port = 20000 + Math.floor(Math.random() * 40000);
                     form.limit_gb = 1000.0; 
-                    form.reset_cycle = 'never';
+                    form.reset_cycle = 'monthly';
                     form.expiry_date = getFutureNaturalMonthStr(1);
                     form.secret = '';
                     dialogVisible.value = true;
