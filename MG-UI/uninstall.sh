@@ -10,12 +10,18 @@ echo "[1/4] 停止并移除系统守护进程..."
 systemctl stop mg-panel 2>/dev/null
 systemctl disable mg-panel 2>/dev/null
 rm -f /etc/systemd/system/mg-panel.service
+
+systemctl stop mg-bot 2>/dev/null
+systemctl disable mg-bot 2>/dev/null
+rm -f /etc/systemd/system/mg-bot.service
+
 systemctl daemon-reload
 
 # 2. 暴力击杀所有底层存活的代理进程
 echo "[2/4] 清理底层 MG 运行进程..."
 pkill -f 'mg simple-run' 2>/dev/null
 pkill -f 'mg_panel.py' 2>/dev/null
+pkill -f 'mg_bot.py' 2>/dev/null
 
 # 3. 备份数据库 (防误杀)
 echo "[3/4] 备份数据库..."
@@ -30,7 +36,7 @@ fi
 
 # 4. 删除所有面板文件和核心底层程序
 echo "[4/4] 抹除核心文件..."
-rm -f /root/mg_panel.py /root/mg_executor.sh /root/index.html
+rm -f /root/mg_panel.py /root/mg_executor.sh /root/index.html /root/mg_bot.py
 rm -rf /etc/mg_conf
 rm -f /usr/local/bin/mg
 rm -rf /var/run/mg_*.pid
