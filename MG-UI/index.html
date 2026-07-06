@@ -99,8 +99,7 @@
 
                 <el-table-column label="直连配置" width="110" align="center">
                     <template #default="scope">
-                        <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">查看
-                        </el-button>
+                        <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">查看</el-button>
                     </template>
                 </el-table-column>
 
@@ -180,10 +179,8 @@
             <template #footer>
                 <span class="dialog-footer">
                     <el-button @click="detailsDialogVisible = false">取消</el-button>
-                    <el-button type="success" @click="copyAndClose(currentDetailNode.link)">复制链接
-                    </el-button>
-                    <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">复制全部
-                    </el-button>
+                    <el-button type="success" @click="copyAndClose(currentDetailNode.link)">复制链接</el-button>
+                    <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">复制全部</el-button>
                 </span>
             </template>
         </el-dialog>
