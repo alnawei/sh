@@ -232,6 +232,7 @@ def get_nodes():
     
     server_ip = os.popen("curl -s4 --connect-timeout 2 ip.sb || echo '127.0.0.1'").read().strip()
     for node in nodes:
+        node['server_ip'] = server_ip   # <--- 请在后端补充这一行
         node['used_gb'] = round(node['used_bytes'] / (1024**3), 3)
         node['link'] = f"tg://proxy?server={server_ip}&port={node['port']}&secret={node['secret']}"
     return jsonify({"success": True, "data": nodes})
