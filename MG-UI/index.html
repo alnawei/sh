@@ -33,7 +33,6 @@
 </head>
 <body>
     <div id="app" v-cloak>
-        <!-- 登录页 -->
         <div v-if="!isLoggedIn" class="login-wrapper">
             <el-card class="login-card" shadow="never">
                 <div class="login-header">🛡️ MG Console</div>
@@ -47,7 +46,6 @@
             </el-card>
         </div>
 
-        <!-- 面板主页 -->
         <div v-else class="dashboard">
             <div class="nav-header">
                 <div class="brand"><el-icon><Platform></Platform></el-icon> MG 生产级中控台</div>
@@ -57,7 +55,6 @@
             <div class="toolbar">
                 <el-button type="primary" @click="openAddDialog"><el-icon><Plus></Plus></el-icon>&nbsp;添加入站规则</el-button>
                 <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh></Refresh></el-icon>&nbsp;刷新</el-button>
-                <!-- Bot 专属配置按钮 -->
                 <el-button type="warning" plain @click="openBotDialog"><el-icon><Setting></Setting></el-icon>&nbsp;Bot设置</el-button>
             </div>
 
@@ -127,7 +124,6 @@
             </el-table>
         </div>
 
-        <!-- 聚合弹窗：新增 / 编辑 -->
         <el-dialog v-model="dialogVisible" :title="isEditMode ? '📝 编辑 MG 入站规则' : '➕ 新增 MG 入站规则'" width="450px" center custom-class="dark-dialog">
             <el-form :model="form" label-width="120px" label-position="left">
                 <el-form-item label="监听端口">
@@ -160,7 +156,6 @@
             </template>
         </el-dialog>
 
-        <!-- 详情弹窗 -->
         <el-dialog v-model="detailsDialogVisible" title="📄 节点配置详情" width="540px" center custom-class="dark-dialog">
             <el-descriptions :column="1" border size="default" direction="horizontal">
                 <el-descriptions-item label="服务器 IP">
@@ -196,37 +191,39 @@
             </template>
         </el-dialog>
 
-        <!-- Telegram Bot 设置弹窗（采用 label-position="top" 纵向布局） -->
         <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="500px" center custom-class="dark-dialog">
             <el-form :model="botForm" label-position="top">
                 
-                <el-form-item label="机器人密钥 (Bot Token)">
+                <el-form-item label="机器人密钥 (Bot Token)" style="margin-bottom: 20px;">
                     <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token" style="width: 100%;"></el-input>
-                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                    <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.4;">
                         向 Telegram @BotFather 申请获取
                     </div>
                 </el-form-item>
                 
-                <el-form-item label="管理员 ID">
+                <el-form-item label="管理员 ID" style="margin-bottom: 20px;">
                     <el-input v-model="botForm.admin_id" placeholder="在此输入你的纯数字 ID" style="width: 100%;"></el-input>
-                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                    <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.4;">
                         你的 TG 数字 ID（通过 @userinfobot 获取），用于拦截非法控制
                     </div>
                 </el-form-item>
                 
-                <!-- 彻底修复原生 DOM 导致的分割线吞并元素问题 -->
                 <el-divider border-style="dashed"></el-divider>
                 
-                <el-form-item label="节点流量预警 (%)">
-                    <el-input v-model="botForm.node_traffic_alert_pct" type="number" placeholder="例如 80 (选填)" style="width: 100%;"></el-input>
-                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                <el-form-item label="节点流量预警 (%)" style="margin-bottom: 20px;">
+                    <el-input v-model="botForm.node_traffic_alert_pct" type="number" placeholder="例如 80 (选填)" style="width: 100%;">
+                        <template #append>%</template>
+                    </el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.4;">
                         单个节点流量使用达到限额的百分比时，Bot 将会推送提醒
                     </div>
                 </el-form-item>
                 
-                <el-form-item label="全局流量预警 (GB)">
-                    <el-input v-model="botForm.server_traffic_alert_gb" type="number" placeholder="例如 2500 (选填)" style="width: 100%;"></el-input>
-                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                <el-form-item label="全局流量预警 (GB)" style="margin-bottom: 20px;">
+                    <el-input v-model="botForm.server_traffic_alert_gb" type="number" placeholder="例如 2500 (选填)" style="width: 100%;">
+                        <template #append>GB</template>
+                    </el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.4;">
                         所有节点合计使用流量达到此数值时，Bot 将会推送提醒
                     </div>
                 </el-form-item>
@@ -271,7 +268,13 @@
                 const currentDetailNode = ref({});
 
                 const botDialogVisible = ref(false);
-                const botForm = reactive({ bot_token: '', admin_id: '' });
+                // 【关键修复】这里完整定义了所有的响应式变量，彻底防止 Vue 底层卡死黑屏
+                const botForm = reactive({ 
+                    bot_token: '', 
+                    admin_id: '', 
+                    node_traffic_alert_pct: '', 
+                    server_traffic_alert_gb: '' 
+                });
                 const botLoading = ref(false);
 
                 // 默认建站参数配置
@@ -337,8 +340,11 @@
                     try {
                         const res = await axios.get('/mg-api/settings/bot');
                         if (res.data.success) {
+                            // 【关键修复】接口数据精准回显到四个变量中
                             botForm.bot_token = res.data.data.bot_token || '';
                             botForm.admin_id = res.data.data.admin_id || '';
+                            botForm.node_traffic_alert_pct = res.data.data.node_traffic_alert_pct || '';
+                            botForm.server_traffic_alert_gb = res.data.data.server_traffic_alert_gb || '';
                         }
                     } catch (e) {}
                     botDialogVisible.value = true;
@@ -453,7 +459,6 @@
                     const link = node.link || '';
                     const expiry = formatShortDate(node.expiry_date);
 
-                    // 严格遵守排版规范（全角冒号及指定空行缩进）
                     const textToCopy = `服务器 IP：${ip}\n监听端口：${port}\nMTProxy Secret：\n${secret}\n\nTG 一键链接：\n${link}\n\n到期时间：${expiry}`;
 
                     copyLink(textToCopy);
