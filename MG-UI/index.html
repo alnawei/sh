@@ -98,7 +98,6 @@
                     </template>
                 </el-table-column>
 
-                <!-- 【修改点 1】修改按钮文字为“查看”，并绑定打开详情弹窗事件 -->
                 <el-table-column label="直连配置" width="110" align="center">
                     <template #default="scope">
                         <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">
@@ -157,8 +156,8 @@
             </template>
         </el-dialog>
 
-        <!-- 【修改点 2 & 3 & 4】新增详情弹窗 -->
-        <el-dialog v-model="detailsDialogVisible" title="📄 节点配置详情" width="500px" center custom-class="dark-dialog">
+        <!-- 详情弹窗 -->
+        <el-dialog v-model="detailsDialogVisible" title="📄 节点配置详情" width="540px" center custom-class="dark-dialog">
             <el-descriptions :column="1" border size="default" direction="horizontal">
                 <el-descriptions-item label="服务器 IP">
                     {{ currentDetailNode.server_ip }}
@@ -184,7 +183,11 @@
                 <span class="dialog-footer">
                     <el-button @click="detailsDialogVisible = false">取消</el-button>
                     <el-button type="success" @click="copyAndClose(currentDetailNode.link)">
-                        <el-icon><Document-Copy /></el-icon>&nbsp;复制一键链接
+                        <el-icon><Link /></el-icon>&nbsp;复制链接
+                    </el-button>
+                    <!-- 【修改点】新增复制全部按钮 -->
+                    <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">
+                        <el-icon><DocumentCopy /></el-icon>&nbsp;复制全部
                     </el-button>
                 </span>
             </template>
@@ -217,7 +220,6 @@
                 const dialogVisible = ref(false);
                 const isEditMode = ref(false);
                 
-                // 详情弹窗对应的状态
                 const detailsDialogVisible = ref(false);
                 const currentDetailNode = ref({});
 
@@ -243,15 +245,12 @@
                     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
                 };
 
-                // 【时间截取方法】获取 YYYY-MM-DD
                 const formatShortDate = (dateStr) => {
                     if (!dateStr) return '永久有效';
                     return dateStr.split(' ')[0];
                 };
 
-                // 【打开详情弹窗】并做 IP 获取的双保险处理
                 const openDetailsDialog = (row) => {
-                    // 如果后端没有传 server_ip，则通过正则从 link 中自动解析提取
                     let extractedIp = row.server_ip;
                     if (!extractedIp && row.link) {
                         const ipMatch = row.link.match(/server=([^&]+)/);
@@ -359,7 +358,6 @@
                     } catch (e) {}
                 };
 
-                // 原有的纯复制函数
                 const copyLink = (text) => {
                     if(navigator.clipboard && window.isSecureContext) {
                         navigator.clipboard.writeText(text).then(() => { ElMessage.success('配置已复制到剪贴板'); });
@@ -371,9 +369,31 @@
                     }
                 };
 
-                // 【修改点 4】弹窗内点击复制后自动关闭弹窗
                 const copyAndClose = (text) => {
                     copyLink(text);
+                    detailsDialogVisible.value = false;
+                };
+
+                // 【修改点】核心排版：拼接全部内容并复制
+                const copyAllAndClose = (node) => {
+                    const ip = node.server_ip || '';
+                    const port = node.port || '';
+                    const secret = node.secret || '';
+                    const link = node.link || '';
+                    const expiry = formatShortDate(node.expiry_date);
+
+                    // 严格遵守排版规范（全角冒号及指定空行缩进）
+                    const textToCopy = `服务器 IP：${ip}
+监听端口：${port}
+MTProxy Secret：
+${secret}
+
+TG 一键链接：
+${link}
+
+到期时间：${expiry}`;
+
+                    copyLink(textToCopy);
                     detailsDialogVisible.value = false;
                 };
 
@@ -381,10 +401,10 @@
 
                 return {
                     isAppMounted, isLoggedIn, loading, actionLoading, loginForm, dialogVisible, isEditMode, form, nodes, customColors,
-                    detailsDialogVisible, currentDetailNode, // 详情弹窗参数
+                    detailsDialogVisible, currentDetailNode, 
                     UserIcon, LockIcon, handleLogin, handleLogout, fetchNodes, openAddDialog, openEditDialog, submitForm,
                     toggleNode, renewNode, resetTraffic, deleteNode, 
-                    copyLink, copyAndClose, calcPercentage, formatShortDate, openDetailsDialog
+                    copyLink, copyAndClose, copyAllAndClose, calcPercentage, formatShortDate, openDetailsDialog
                 };
             }
         });
