@@ -50,15 +50,15 @@
         <!-- 面板主页 -->
         <div v-else class="dashboard">
             <div class="nav-header">
-                <div class="brand"><el-icon><Platform /></el-icon> MG 生产级中控台</div>
-                <div><el-button type="danger" plain size="small" @click="handleLogout"><el-icon><Switch-Button /></el-icon>&nbsp;退出</el-button></div>
+                <div class="brand"><el-icon><Platform></Platform></el-icon> MG 生产级中控台</div>
+                <div><el-button type="danger" plain size="small" @click="handleLogout"><el-icon><Switch-Button></Switch-Button></el-icon>&nbsp;退出</el-button></div>
             </div>
 
             <div class="toolbar">
-                <el-button type="primary" @click="openAddDialog"><el-icon><Plus /></el-icon>&nbsp;添加入站规则</el-button>
-                <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh /></el-icon>&nbsp;刷新</el-button>
+                <el-button type="primary" @click="openAddDialog"><el-icon><Plus></Plus></el-icon>&nbsp;添加入站规则</el-button>
+                <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh></Refresh></el-icon>&nbsp;刷新</el-button>
                 <!-- Bot 专属配置按钮 -->
-                <el-button type="warning" plain @click="openBotDialog"><el-icon><Setting /></el-icon>&nbsp;Bot设置</el-button>
+                <el-button type="warning" plain @click="openBotDialog"><el-icon><Setting></Setting></el-icon>&nbsp;Bot设置</el-button>
             </div>
 
             <el-table :data="nodes" style="width: 100%; border-radius: 8px; overflow: hidden;" v-loading="loading">
@@ -103,7 +103,7 @@
                 <el-table-column label="直连配置" width="110" align="center">
                     <template #default="scope">
                         <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">
-                            <el-icon><View /></el-icon>&nbsp;查看
+                            <el-icon><View></View></el-icon>&nbsp;查看
                         </el-button>
                     </template>
                 </el-table-column>
@@ -113,13 +113,13 @@
                         <div class="btn-group">
                             <el-button v-if="scope.row.status === 'running'" type="warning" size="small" @click="toggleNode(scope.row.port, 'stop')">暂停</el-button>
                             <el-button v-else type="success" size="small" @click="toggleNode(scope.row.port, 'start')">启动</el-button>
-                            <el-button type="success" plain size="small" @click="renewNode(scope.row.port)"><el-icon><Calendar /></el-icon>续费</el-button>
-                            <el-button type="primary" size="small" @click="openEditDialog(scope.row)"><el-icon><Edit /></el-icon>编辑</el-button>
+                            <el-button type="success" plain size="small" @click="renewNode(scope.row.port)"><el-icon><Calendar></Calendar></el-icon>续费</el-button>
+                            <el-button type="primary" size="small" @click="openEditDialog(scope.row)"><el-icon><Edit></Edit></el-icon>编辑</el-button>
                             <el-button type="info" size="small" @click="resetTraffic(scope.row.port)">
-                                <el-icon><Refresh /></el-icon>清零
+                                <el-icon><Refresh></Refresh></el-icon>清零
                             </el-button>
                             <el-popconfirm title="彻底删除此节点？" @confirm="deleteNode(scope.row.port)" confirm-button-type="danger">
-                                <template #reference><el-button type="danger" size="small"><el-icon><Delete /></el-icon></el-button></template>
+                                <template #reference><el-button type="danger" size="small"><el-icon><Delete></Delete></el-icon></el-button></template>
                             </el-popconfirm>
                         </div>
                     </template>
@@ -187,68 +187,50 @@
                 <span class="dialog-footer">
                     <el-button @click="detailsDialogVisible = false">取消</el-button>
                     <el-button type="success" @click="copyAndClose(currentDetailNode.link)">
-                        <el-icon><Link /></el-icon>&nbsp;复制链接
+                        <el-icon><Link></Link></el-icon>&nbsp;复制链接
                     </el-button>
                     <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">
-                        <el-icon><DocumentCopy /></el-icon>&nbsp;复制全部
+                        <el-icon><DocumentCopy></DocumentCopy></el-icon>&nbsp;复制全部
                     </el-button>
                 </span>
             </template>
         </el-dialog>
 
-        <!-- Telegram Bot 设置弹窗 -->
-        <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="550px" destroy-on-close>
-    <el-form :model="botForm" label-position="top" style="display: flex; flex-direction: column; width: 100%;">
-        
-        <el-form-item label="机器人密钥 (Bot Token)" style="display: block !important; width: 100% !important; margin-bottom: 18px;">
-            <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token" style="width: 100%;"></el-input>
-            <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.2; display: block;">
-                向 Telegram @BotFather 申请获取
-            </div>
-        </el-form-item>
-        
-        <el-form-item label="管理员 ID" style="display: block !important; width: 100% !important; margin-bottom: 18px;">
-            <el-input v-model="botForm.admin_id" placeholder="在此输入你的纯数字 ID" style="width: 100%;"></el-input>
-            <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.2; display: block;">
-                你的 TG 数字 ID（通过 @userinfobot 获取），用于拦截非法控制
-            </div>
-        </el-form-item>
-        
-        <el-divider border-style="dashed" style="margin: 10px 0; width: 100%; display: block;"></el-divider>
-        
-        <el-form-item label="节点流量预警(%)" style="display: block !important; width: 100% !important; margin-bottom: 18px;">
-            <el-input v-model="botForm.node_traffic_alert_pct" type="number" placeholder="例如 80 (选填)" style="width: 100%;"></el-input>
-            <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.2; display: block;">
-                单个节点流量使用达到限额的百分比时，Bot 将会推送提醒
-            </div>
-        </el-form-item>
-        
-        <el-form-item label="全局流量预警(GB)" style="display: block !important; width: 100% !important; margin-bottom: 18px;">
-            <el-input v-model="botForm.server_traffic_alert_gb" type="number" placeholder="例如 2500 (选填)" style="width: 100%;"></el-input>
-            <div style="font-size: 12px; color: #909399; margin-top: 6px; line-height: 1.2; display: block;">
-                所有节点合计使用流量达到此数值时，Bot 将会推送提醒
-            </div>
-        </el-form-item>
-        
-    </el-form>
-    
-    <template #footer>
-        <span class="dialog-footer" style="display: block; text-align: right; width: 100%;">
-            <el-button @click="botDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitBotForm" :loading="botLoading">保存并重启 Bot</el-button>
-        </span>
-    </template>
-</el-dialog>
-        
-    </el-form>
-    
-    <template #footer>
-        <span class="dialog-footer">
-            <el-button @click="botDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitBotForm" :loading="botLoading">保存并重启 Bot</el-button>
-        </span>
-    </template>
-</el-dialog>
+        <!-- Telegram Bot 设置弹窗（采用 label-position="top" 纵向布局） -->
+        <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="500px" center custom-class="dark-dialog">
+            <el-form :model="botForm" label-position="top">
+                
+                <el-form-item label="机器人密钥 (Bot Token)">
+                    <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                        向 Telegram @BotFather 申请获取
+                    </div>
+                </el-form-item>
+                
+                <el-form-item label="管理员 ID">
+                    <el-input v-model="botForm.admin_id" placeholder="在此输入你的纯数字 ID" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                        你的 TG 数字 ID（通过 @userinfobot 获取），用于拦截非法控制
+                    </div>
+                </el-form-item>
+                
+                <!-- 彻底修复原生 DOM 导致的分割线吞并元素问题 -->
+                <el-divider border-style="dashed"></el-divider>
+                
+                <el-form-item label="节点流量预警 (%)">
+                    <el-input v-model="botForm.node_traffic_alert_pct" type="number" placeholder="例如 80 (选填)" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                        单个节点流量使用达到限额的百分比时，Bot 将会推送提醒
+                    </div>
+                </el-form-item>
+                
+                <el-form-item label="全局流量预警 (GB)">
+                    <el-input v-model="botForm.server_traffic_alert_gb" type="number" placeholder="例如 2500 (选填)" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.4; width: 100%; display: block;">
+                        所有节点合计使用流量达到此数值时，Bot 将会推送提醒
+                    </div>
+                </el-form-item>
+                
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
