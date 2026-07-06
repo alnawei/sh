@@ -8,8 +8,10 @@ import sqlite3
 import subprocess
 import calendar
 import asyncio
-from datetime import datetime
+import json
 from typing import Any, Awaitable, Callable, Dict
+from datetime import datetime, timedelta
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from aiogram import Bot, Dispatcher, F, Router, BaseMiddleware
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, TelegramObject
@@ -366,6 +368,150 @@ async def main():
     dp.include_router(router)
     
     print(f"[MG Bot] 配置载入成功！管理员ID: {ADMIN_ID}，开始监听 Telegram 消息...")
+    await dp.start_polling(bot)
+
+# ================= 自动巡检与预警逻辑 (带防轰炸机制) =================
+async def check_system_alerts(bot: Bot):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT key, value FROM mg_settings")
+        settings = {row['key']: row['value'] for row in c.fetchall()}
+        
+        admin_id = settings.get('admin_id', '').strip()
+        if not admin_id:
+            conn.close(); return
+            
+        pct_str = settings.get('node_traffic_alert_pct', '')
+        gb_str = settings.get('server_traffic_alert_gb', '')
+        
+        traffic_pct_limit = float(pct_str) if pct_str else None
+        server_gb_limit = float(gb_str) if gb_str else None
+        
+        # 获取全局预警标记
+        global_flags_str = settings.get('global_alert_flags', '{}')
+        try: global_flags = json.loads(global_flags_str)
+        except: global_flags = {}
+        
+        # 1. 全局总流量预警
+        c.execute("SELECT sum(used_bytes) as total_bytes FROM mg_nodes")
+        row = c.fetchone()
+        total_bytes = row['total_bytes'] if row['total_bytes'] else 0
+        total_gb = total_bytes / (1024**3)
+        
+        if server_gb_limit and total_gb >= server_gb_limit:
+            if not global_flags.get('traffic_alerted'):
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=f"🚨 <b>【全局流量高水位预警】</b>\n━━━━━━━━━━━━━━━\n"
+                         f"⚠️ 服务器所有节点总计已使用 <b>{total_gb:.2f} GB</b>\n"
+                         f"📊 已达到/超过您设定的全局预警线 <b>{server_gb_limit} GB</b>！\n"
+                         f"请及时关注服务器整体网络状况！",
+                    parse_mode="HTML"
+                )
+                global_flags['traffic_alerted'] = True
+                c.execute("REPLACE INTO mg_settings (key, value) VALUES ('global_alert_flags', ?)", (json.dumps(global_flags),))
+                conn.commit()
+        else:
+            # 流量重置下降后，自动解除标记
+            if global_flags.get('traffic_alerted'):
+                global_flags['traffic_alerted'] = False
+                c.execute("REPLACE INTO mg_settings (key, value) VALUES ('global_alert_flags', ?)", (json.dumps(global_flags),))
+                conn.commit()
+                
+        # 2. 单节点预警 (到期 / 流量)
+        try: c.execute("SELECT port, expiry_date, used_bytes, limit_gb, status, alerted_flags FROM mg_nodes")
+        except sqlite3.OperationalError: 
+            conn.close(); return # 若数据库正在平滑升级中，跳过此轮
+            
+        nodes = c.fetchall()
+        for node in nodes:
+            port = node['port']
+            expiry_date = node['expiry_date']
+            used_bytes = node['used_bytes'] or 0
+            limit_gb = node['limit_gb'] or 0
+            status = node['status']
+            
+            flags_str = node['alerted_flags'] or '{}'
+            try: flags = json.loads(flags_str)
+            except: flags = {}
+            need_update = False
+            
+            # (A) 到期检查 (3天内且运行中)
+            if expiry_date and status == 'running':
+                try:
+                    exp_dt = datetime.strptime(expiry_date, '%Y-%m-%d %H:%M:%S')
+                    now = datetime.now()
+                    delta = exp_dt - now
+                    if timedelta(days=0) < delta <= timedelta(days=3):
+                        if flags.get('expiry_date') != expiry_date:  # 验证续费后重置的逻辑防轰炸
+                            await bot.send_message(
+                                chat_id=admin_id,
+                                text=f"⏳ <b>【节点即将到期预警】</b>\n━━━━━━━━━━━━━━━\n"
+                                     f"🔌 端口：<code>{port}</code>\n"
+                                     f"🕒 到期时间：{expiry_date}\n"
+                                     f"⚠️ 距离到期不足 3 天，为避免服务中断，请及时续费！",
+                                parse_mode="HTML"
+                            )
+                            flags['expiry_date'] = expiry_date
+                            need_update = True
+                except Exception: pass
+                    
+            # (B) 流量检查 (超出设定阈值)
+            if traffic_pct_limit and limit_gb > 0 and status == 'running':
+                used_pct = (used_bytes / (limit_gb * 1024**3)) * 100
+                if used_pct >= traffic_pct_limit:
+                    if not flags.get('traffic_alerted'):
+                        await bot.send_message(
+                            chat_id=admin_id,
+                            text=f"📈 <b>【单节点流量超限预警】</b>\n━━━━━━━━━━━━━━━\n"
+                                 f"🔌 端口：<code>{port}</code>\n"
+                                 f"📊 已用流量：{used_bytes/(1024**3):.2f} GB (<b>{used_pct:.1f}%</b>)\n"
+                                 f"📈 设定限额：{limit_gb} GB\n"
+                                 f"⚠️ 节点流量使用已达到/超过您设定的 <b>{traffic_pct_limit}%</b> 预警线！",
+                            parse_mode="HTML"
+                        )
+                        flags['traffic_alerted'] = True
+                        need_update = True
+                else:
+                    if flags.get('traffic_alerted'):
+                        flags['traffic_alerted'] = False
+                        need_update = True
+                        
+            if need_update:
+                c.execute("UPDATE mg_nodes SET alerted_flags=? WHERE port=?", (json.dumps(flags), port))
+                conn.commit()
+                
+        conn.close()
+    except Exception as e:
+        print(f"[Timer Error] check_system_alerts: {e}")
+
+# ================= 动态读取配置启动机制 =================
+async def main():
+    global BOT_TOKEN, ADMIN_ID
+    print("[MG Bot] 守护进程已启动，检查 Web 配置中...")
+    
+    while True:
+        token, admin_id = fetch_bot_config()
+        if token and admin_id:
+            BOT_TOKEN, ADMIN_ID = token, admin_id
+            break
+        print("[MG Bot] 尚未在 Web 页面配置 Token 或 Admin ID，系统挂起，10秒后重试...")
+        await asyncio.sleep(10)
+        
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher(storage=MemoryStorage())
+    dp.include_router(router)
+    
+    # 【新增】初始化并启动 APScheduler 定时调度器
+    scheduler = AsyncIOScheduler(timezone="Asia/Shanghai")
+    # 每隔 2 小时无感后台巡检一次
+    scheduler.add_job(check_system_alerts, 'interval', hours=2, args=[bot])
+    # 为了防止等待，启动时立刻强制执行一次检查
+    scheduler.add_job(check_system_alerts, 'date', run_date=datetime.now(), args=[bot])
+    scheduler.start()
+    
+    print(f"[MG Bot] 配置载入成功！管理员ID: {ADMIN_ID}，开始监听 Telegram 消息与定时任务...")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
