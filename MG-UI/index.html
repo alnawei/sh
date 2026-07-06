@@ -197,27 +197,39 @@
         </el-dialog>
 
         <!-- Telegram Bot 设置弹窗 -->
-        <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="480px" center custom-class="dark-dialog">
-            <el-form :model="botForm" label-width="150px" label-position="left">
-                <el-form-item label="机器人密钥(Token)">
-                    <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token"></el-input>
-                    <div class="info-text">向 Telegram @BotFather 申请获取</div>
+        <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="500px" center custom-class="dark-dialog">
+            <el-form :model="botForm" label-width="160px" label-position="left">
+                
+                <el-form-item label="机器人密钥 (Bot Token)">
+                    <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.2; width: 100%;">
+                        向 Telegram @BotFather 申请获取
+                    </div>
                 </el-form-item>
+                
                 <el-form-item label="管理员 ID">
-                    <el-input v-model="botForm.admin_id" placeholder="在此输入你的纯数字 ID"></el-input>
-                    <div class="info-text">你的 TG 数字 ID（通过 @userinfobot 获取），用于拦截非法控制</div>
+                    <el-input v-model="botForm.admin_id" placeholder="在此输入你的纯数字 ID" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.2; width: 100%;">
+                        你的 TG 数字 ID（通过 @userinfobot 获取），用于拦截非法控制
+                    </div>
                 </el-form-item>
                 
                 <el-divider border-style="dashed" />
                 
                 <el-form-item label="节点流量预警(%)">
-                    <el-input v-model="botForm.node_traffic_alert_pct" type="number" placeholder="例如 80 (选填)"></el-input>
-                    <div class="info-text">单个节点流量使用达到限额的百分比时提醒</div>
+                    <el-input v-model="botForm.node_traffic_alert_pct" type="number" placeholder="例如 80 (选填)" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.2; width: 100%;">
+                        单个节点流量使用达到限额的百分比时，Bot 将会推送提醒
+                    </div>
                 </el-form-item>
+                
                 <el-form-item label="全局流量预警(GB)">
-                    <el-input v-model="botForm.server_traffic_alert_gb" type="number" placeholder="例如 2500 (选填)"></el-input>
-                    <div class="info-text">所有节点合计使用流量达到此数值时提醒</div>
+                    <el-input v-model="botForm.server_traffic_alert_gb" type="number" placeholder="例如 2500 (选填)" style="width: 100%;"></el-input>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px; line-height: 1.2; width: 100%;">
+                        所有节点合计使用流量达到此数值时，Bot 将会推送提醒
+                    </div>
                 </el-form-item>
+                
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
