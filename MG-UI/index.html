@@ -23,7 +23,7 @@
         .toolbar { margin-bottom: 20px; display: flex; gap: 10px; }
         .el-table { --el-table-border-color: #363637; --el-table-bg-color: #1D1E1F; --el-table-tr-bg-color: #1D1E1F; --el-table-header-bg-color: #262728; }
         .traffic-box { display: flex; flex-direction: column; gap: 6px; }
-        .info-text { font-size: 12px; color: #A3A6AD; margin-top: 4px; }
+        .info-text { font-size: 12px; color: #A3A6AD; margin-top: 4px; line-height: 1.4; }
         .btn-group { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
         
         /* 详情弹窗自定义样式 */
@@ -57,7 +57,7 @@
             <div class="toolbar">
                 <el-button type="primary" @click="openAddDialog"><el-icon><Plus /></el-icon>&nbsp;添加入站规则</el-button>
                 <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh /></el-icon>&nbsp;刷新</el-button>
-                <!-- 【新增】Bot 配置按钮 -->
+                <!-- Bot 专属配置按钮 -->
                 <el-button type="warning" plain @click="openBotDialog"><el-icon><Setting /></el-icon>&nbsp;Bot设置</el-button>
             </div>
 
@@ -102,7 +102,9 @@
 
                 <el-table-column label="直连配置" width="110" align="center">
                     <template #default="scope">
-                        <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">查看</el-button>
+                        <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">
+                            <el-icon><View /></el-icon>&nbsp;查看
+                        </el-button>
                     </template>
                 </el-table-column>
 
@@ -184,16 +186,20 @@
             <template #footer>
                 <span class="dialog-footer">
                     <el-button @click="detailsDialogVisible = false">取消</el-button>
-                    <el-button type="success" @click="copyAndClose(currentDetailNode.link)">复制链接</el-button>
-                    <!-- 新增复制全部按钮 -->
-                    <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">复制全部</el-button>
+                    <el-button type="success" @click="copyAndClose(currentDetailNode.link)">
+                        <el-icon><Link /></el-icon>&nbsp;复制链接
+                    </el-button>
+                    <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">
+                        <el-icon><DocumentCopy /></el-icon>&nbsp;复制全部
+                    </el-button>
                 </span>
             </template>
         </el-dialog>
-        <!-- 【新增】Telegram 机器人配置弹窗 -->
+
+        <!-- Telegram Bot 设置弹窗 -->
         <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="450px" center custom-class="dark-dialog">
             <el-form :model="botForm" label-width="140px" label-position="left">
-                <el-form-item label="机器人密钥 (Token)">
+                <el-form-item label="机器人密钥(Token)">
                     <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token"></el-input>
                     <div class="info-text">向 Telegram @BotFather 申请获取</div>
                 </el-form-item>
@@ -219,7 +225,7 @@
         axios.interceptors.response.use(response => response, error => {
             if (error.response && error.response.status === 401) {
                 appVue.isLoggedIn = false;
-                if(appVue.isAppMounted) ElMessage.error('请重新登录');
+                if(appVue.isAppMounted) ElMessage.error('身份验证过期，请重新登录');
             }
             return Promise.reject(error);
         });
@@ -240,6 +246,11 @@
                 const detailsDialogVisible = ref(false);
                 const currentDetailNode = ref({});
 
+                const botDialogVisible = ref(false);
+                const botForm = reactive({ bot_token: '', admin_id: '' });
+                const botLoading = ref(false);
+
+                // 默认建站参数配置
                 const form = reactive({ port: 20000, limit_gb: 1000.0, reset_cycle: 'monthly', expiry_date: '', secret: '' });
                 const nodes = ref([]);
 
@@ -274,10 +285,7 @@
                         extractedIp = ipMatch ? ipMatch[1] : '获取失败';
                     }
                     
-                    currentDetailNode.value = {
-                        ...row,
-                        server_ip: extractedIp
-                    };
+                    currentDetailNode.value = { ...row, server_ip: extractedIp };
                     detailsDialogVisible.value = true;
                 };
 
@@ -299,6 +307,29 @@
                     form.expiry_date = row.expiry_date || '';
                     form.secret = row.secret;
                     dialogVisible.value = true;
+                };
+
+                const openBotDialog = async () => {
+                    try {
+                        const res = await axios.get('/mg-api/settings/bot');
+                        if (res.data.success) {
+                            botForm.bot_token = res.data.data.bot_token || '';
+                            botForm.admin_id = res.data.data.admin_id || '';
+                        }
+                    } catch (e) {}
+                    botDialogVisible.value = true;
+                };
+
+                const submitBotForm = async () => {
+                    botLoading.value = true;
+                    try {
+                        const res = await axios.post('/mg-api/settings/bot', botForm);
+                        if (res.data.success) {
+                            ElMessage.success(res.data.msg);
+                            botDialogVisible.value = false;
+                        } else { ElMessage.error(res.data.msg); }
+                    } catch (e) { ElMessage.error('Bot 配置保存失败'); } 
+                    finally { botLoading.value = false; }
                 };
 
                 const fetchNodes = async () => {
@@ -391,7 +422,6 @@
                     detailsDialogVisible.value = false;
                 };
 
-                // 核心排版：拼接全部内容并复制
                 const copyAllAndClose = (node) => {
                     const ip = node.server_ip || '';
                     const port = node.port || '';
@@ -410,8 +440,9 @@
 
                 return {
                     isAppMounted, isLoggedIn, loading, actionLoading, loginForm, dialogVisible, isEditMode, form, nodes, customColors,
-                    detailsDialogVisible, currentDetailNode, 
+                    detailsDialogVisible, currentDetailNode, botDialogVisible, botForm, botLoading,
                     UserIcon, LockIcon, handleLogin, handleLogout, fetchNodes, openAddDialog, openEditDialog, submitForm,
+                    openBotDialog, submitBotForm,
                     toggleNode, renewNode, resetTraffic, deleteNode, 
                     copyLink, copyAndClose, copyAllAndClose, calcPercentage, formatShortDate, openDetailsDialog
                 };
@@ -421,41 +452,6 @@
         app.use(ElementPlus);
         for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component); }
         const appVue = app.mount('#app');
-
-        // 新增：Bot配置相关状态
-                const botDialogVisible = ref(false);
-                const botForm = reactive({ bot_token: '', admin_id: '' });
-                const botLoading = ref(false);
-
-                // 新增：打开弹窗时读取后台配置
-                const openBotDialog = async () => {
-                    try {
-                        const res = await axios.get('/mg-api/settings/bot');
-                        if (res.data.success) {
-                            botForm.bot_token = res.data.data.bot_token;
-                            botForm.admin_id = res.data.data.admin_id;
-                        }
-                    } catch (e) {}
-                    botDialogVisible.value = true;
-                };
-
-                // 新增：提交配置
-                const submitBotForm = async () => {
-                    botLoading.value = true;
-                    try {
-                        const res = await axios.post('/mg-api/settings/bot', botForm);
-                        if (res.data.success) {
-                            ElMessage.success(res.data.msg);
-                            botDialogVisible.value = false;
-                        } else {
-                            ElMessage.error(res.data.msg);
-                        }
-                    } catch (e) {
-                        ElMessage.error('保存失败');
-                    } finally {
-                        botLoading.value = false;
-                    }
-                };
     </script>
 </body>
 </html>
