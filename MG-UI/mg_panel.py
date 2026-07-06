@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# mg_panel.py - MG 私有协议中控调度面板
+# mg_panel.py - MG 私有协议中控调度面板 (Production + Watchdog Version)
 
 import os
 import time
+import socket
 import sqlite3
 import threading
 import subprocess
+from datetime import datetime
 from functools import wraps
 from flask import Flask, request, jsonify, session, send_from_directory
-from datetime import datetime
 
 # ================= 核心配置区 =================
 DB_FILE = "/root/mg_core.db"
@@ -18,7 +19,6 @@ MG_BIN = "/usr/local/bin/mg"
 FAKE_DOMAIN = "icloud.com"
 WEB_PORT = 8888
 
-# Flask 凭证与管理员账户配置
 FLASK_SECRET = os.urandom(24) 
 ADMIN_USER = "admin"
 ADMIN_PASS = "admin"          
@@ -26,14 +26,11 @@ ADMIN_PASS = "admin"
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
-
-# 数据库全局读写互斥锁
 db_lock = threading.Lock()
 
 # ================= 基础组件与数据库 =================
 
 def get_db():
-    # 【修复1】追加 timeout=20，遭遇写锁排队等待而不是直接崩溃
     conn = sqlite3.connect(DB_FILE, timeout=20.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
@@ -43,7 +40,7 @@ def init_db():
         conn = get_db()
         c = conn.cursor()
         
-        # 1. 创建核心表（包含生产级新字段）
+        # 1. 核心表创建
         c.execute('''CREATE TABLE IF NOT EXISTS mg_nodes
                      (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                       port INTEGER UNIQUE, 
@@ -54,8 +51,8 @@ def init_db():
                       reset_cycle TEXT DEFAULT 'never',
                       expiry_date TEXT DEFAULT '',
                       last_reset_date TEXT DEFAULT '')''')
-        
-        # 2. 字段平滑升级检测 (兼容旧版本数据库)
+                      
+        # 2. 版本平滑迁移 (自动检测并新增字段)
         c.execute("PRAGMA table_info(mg_nodes)")
         existing_columns = [col['name'] for col in c.fetchall()]
         
@@ -73,23 +70,20 @@ def init_db():
         conn.commit()
         conn.close()
 
-# ================= 底层 Shell & iptables 调度 =================
+# ================= 底层 Shell & 看门狗探活 =================
 
 def run_executor(command, port, secret=""):
     try:
         cmd = ["bash", EXECUTOR_SCRIPT, command, str(port)]
-        if secret:
-            cmd.append(secret)
+        if secret: cmd.append(secret)
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
     except subprocess.CalledProcessError:
         return False
 
 def iptables_safe_execute(cmd):
-    try:
-        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except:
-        pass
+    try: subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except: pass
 
 def setup_iptables_monitor(port):
     iptables_safe_execute(f"iptables -C OUTPUT -p tcp --sport {port} || iptables -I OUTPUT -p tcp --sport {port}")
@@ -115,25 +109,44 @@ def get_iptables_bytes(port):
         pass
     return 0
 
-# ================= 后台监控守护线程 (主控管家) =================
+def is_process_alive(port):
+    """【新增】双重健康检查：验证 PID 存活且 Socket 监听正常"""
+    pid_file = f"/var/run/mg_{port}.pid"
+    if not os.path.exists(pid_file):
+        return False
+        
+    try:
+        with open(pid_file, 'r') as f:
+            pid = f.read().strip()
+        if not pid or not os.path.isdir(f"/proc/{pid}"):
+            return False
+    except:
+        return False
+        
+    # Socket 检查，防止进程假死
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            return s.connect_ex(('127.0.0.1', port)) == 0
+    except:
+        return False
+
+# ================= 守护线程：全能主控管家 =================
 
 def master_monitor_loop():
-    """后台独立线程：每隔 60 秒轮询一次，处理流量统计、超限熔断、到期阻断、周期重置"""
+    """后台独立线程：轮询处理流量统计、超限熔断、到期阻断、周期重置与看门狗自愈"""
     while True:
         try:
-            # 获取当前时间（格式化用于比对）
             now = datetime.now()
             current_date_str = now.strftime('%Y-%m-%d')
             current_month_str = now.strftime('%Y-%m')
             
-            # 1. 读操作：获取所有节点
             conn = get_db()
             c = conn.cursor()
             c.execute("SELECT * FROM mg_nodes")
             nodes = [dict(row) for row in c.fetchall()]
             conn.close()
             
-            # 2. 遍历处理每个节点
             for node in nodes:
                 port = node['port']
                 limit_bytes = int(node['limit_gb'] * 1024 * 1024 * 1024)
@@ -142,82 +155,71 @@ def master_monitor_loop():
                 last_reset = node['last_reset_date']
                 expiry_date_str = node['expiry_date']
                 
-                # 获取实时物理流量
                 current_bytes = get_iptables_bytes(port)
                 
-                # --- 核心状态机逻辑 ---
                 need_update = False
                 new_status = status
                 new_used_bytes = current_bytes
                 new_last_reset = last_reset
                 
-                # 【动作 A】: 检查周期重置 (每日/每月)
+                # 【环节 A】: 检查周期重置
                 if reset_cycle == 'daily' and last_reset != current_date_str:
                     remove_iptables_rules(port)
                     setup_iptables_monitor(port)
-                    new_used_bytes = 0
-                    new_last_reset = current_date_str
-                    need_update = True
-                    
+                    new_used_bytes, new_last_reset, need_update = 0, current_date_str, True
                 elif reset_cycle == 'monthly' and last_reset[:7] != current_month_str:
                     remove_iptables_rules(port)
                     setup_iptables_monitor(port)
-                    new_used_bytes = 0
-                    new_last_reset = current_date_str
-                    need_update = True
+                    new_used_bytes, new_last_reset, need_update = 0, current_date_str, True
 
-                # 【动作 B】: 检查是否到期 (Expiry Date)
+                # 【环节 B】: 检查到期
                 is_expired = False
                 if expiry_date_str:
                     try:
                         expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d %H:%M:%S')
-                        if now > expiry_date:
-                            is_expired = True
-                    except:
-                        pass # 日期格式错误则忽略
+                        if now > expiry_date: is_expired = True
+                    except: pass
                         
                 if is_expired and status == 'running':
                     block_port(port)
                     run_executor('stop', port)
-                    new_status = 'expired'
-                    need_update = True
-                    print(f"[Monitor] Port {port} expired, blocked.")
+                    new_status, need_update = 'expired', True
 
-                # 【动作 C】: 检查是否超流量 (Quota Exceeded)
-                # 注意：如果刚才触发了重置，这里的 current_bytes 就不能用原来的了
+                # 【环节 C】: 检查超流量
                 check_bytes = new_used_bytes if need_update else current_bytes
-                
                 if not is_expired and check_bytes >= limit_bytes and status == 'running':
                     block_port(port)
                     run_executor('stop', port)
-                    new_status = 'blocked'
-                    need_update = True
-                    print(f"[Monitor] Port {port} quota exceeded, blocked.")
+                    new_status, need_update = 'blocked', True
 
-                # 【动作 D】: 写入数据库 (如果有任何状态、重置或流量变更)
-                # 即便没有状态变更，只要流量有增长也需要更新
+                # 【环节 D】: 看门狗自愈 (如果应当运行，但实际挂了)
+                if new_status == 'running' and not is_process_alive(port):
+                    print(f"[Watchdog] Port {port} is dead! Auto-healing...")
+                    pid_file = f"/var/run/mg_{port}.pid"
+                    if os.path.exists(pid_file):
+                        try: os.remove(pid_file)
+                        except: pass
+                    unblock_port(port)
+                    run_executor('start', port, node['secret'])
+
+                # 【环节 E】: 数据回写
                 if need_update or current_bytes > node['used_bytes']:
                     with db_lock:
                         try:
                             write_conn = get_db()
                             write_cursor = write_conn.cursor()
-                            
-                            # 更新流量、状态、最后重置时间
                             write_cursor.execute('''
                                 UPDATE mg_nodes 
                                 SET used_bytes=?, status=?, last_reset_date=? 
                                 WHERE port=?
                             ''', (new_used_bytes, new_status, new_last_reset, port))
-                            
                             write_conn.commit()
                             write_conn.close()
-                        except Exception as db_e:
-                            print(f"[Monitor DB Write Error] {db_e}")
+                        except: pass
                             
         except Exception as e:
-            print(f"[Monitor Master Error] {e}")
+            print(f"[Master Monitor Error] {e}")
         
-        # 休息 60 秒后再次全面巡检
         time.sleep(60)
 
 # ================= Flask 鉴权与 API 路由 =================
@@ -226,7 +228,7 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('logged_in'):
-            return jsonify({"success": False, "msg": "未授权访问，请先登录"}), 401
+            return jsonify({"success": False, "msg": "未授权访问"}), 401
         return f(*args, **kwargs)
     return decorated_function
 
@@ -235,8 +237,8 @@ def login():
     data = request.json
     if data and data.get('username') == ADMIN_USER and data.get('password') == ADMIN_PASS:
         session['logged_in'] = True
-        return jsonify({"success": True, "msg": "登录成功"})
-    return jsonify({"success": False, "msg": "用户名或密码错误"}), 401
+        return jsonify({"success": True})
+    return jsonify({"success": False, "msg": "凭证错误"}), 401
 
 @app.route('/mg-api/logout', methods=['POST'])
 def logout():
@@ -248,16 +250,14 @@ def logout():
 def get_nodes():
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT id, port, secret, limit_gb, used_bytes, status FROM mg_nodes ORDER BY port ASC")
+    c.execute("SELECT * FROM mg_nodes ORDER BY port ASC")
     nodes = [dict(row) for row in c.fetchall()]
     conn.close()
     
     server_ip = os.popen("curl -s4 --connect-timeout 2 ip.sb || echo '127.0.0.1'").read().strip()
-    
     for node in nodes:
         node['used_gb'] = round(node['used_bytes'] / (1024**3), 3)
         node['link'] = f"tg://proxy?server={server_ip}&port={node['port']}&secret={node['secret']}"
-        
     return jsonify({"success": True, "data": nodes})
 
 @app.route('/mg-api/node/add', methods=['POST'])
@@ -266,35 +266,90 @@ def add_node():
     data = request.json
     port = int(data.get('port'))
     limit_gb = float(data.get('limit_gb'))
+    reset_cycle = data.get('reset_cycle', 'never')
+    expiry_date = data.get('expiry_date', '')
     
-    try:
-        secret = subprocess.check_output(f"{MG_BIN} generate-secret --hex {FAKE_DOMAIN}", shell=True).decode('utf-8').strip()
-    except:
-        return jsonify({"success": False, "msg": "底层 Secret 生成失败，请检查二进制文件环境"})
+    custom_secret = data.get('secret', '').strip()
+    if custom_secret:
+        secret = custom_secret
+    else:
+        try:
+            secret = subprocess.check_output(f"{MG_BIN} generate-secret --hex {FAKE_DOMAIN}", shell=True).decode('utf-8').strip()
+        except:
+            return jsonify({"success": False, "msg": "底层 Secret 生成失败"})
     
-    # 【修复2】严格包裹写操作，遇到锁等待 timeout 机制生效
     try:
         with db_lock:
             conn = get_db()
             c = conn.cursor()
-            c.execute("INSERT INTO mg_nodes (port, secret, limit_gb, status) VALUES (?, ?, ?, 'running')", 
-                      (port, secret, limit_gb))
+            c.execute('''INSERT INTO mg_nodes 
+                         (port, secret, limit_gb, status, reset_cycle, expiry_date) 
+                         VALUES (?, ?, ?, 'running', ?, ?)''', 
+                      (port, secret, limit_gb, reset_cycle, expiry_date))
             conn.commit()
             conn.close()
     except sqlite3.IntegrityError:
         return jsonify({"success": False, "msg": f"端口 {port} 已存在"})
     except sqlite3.OperationalError as e:
-        return jsonify({"success": False, "msg": f"数据库写入排队超时: {str(e)}"})
+        return jsonify({"success": False, "msg": f"数据库忙: {e}"})
 
-    # 耗时的 shell 调用放到锁外面，绝不占用数据库锁
     setup_iptables_monitor(port)
     unblock_port(port)
-    success = run_executor('start', port, secret)
+    run_executor('start', port, secret)
+    return jsonify({"success": True, "msg": "节点创建成功"})
+
+@app.route('/mg-api/node/edit', methods=['POST'])
+@login_required
+def edit_node():
+    data = request.json
+    port = int(data.get('port'))
+    limit_gb = float(data.get('limit_gb'))
+    reset_cycle = data.get('reset_cycle', 'never')
+    expiry_date = data.get('expiry_date', '')
+    custom_secret = data.get('secret', '').strip()
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT secret, status FROM mg_nodes WHERE port=?", (port,))
+    row = c.fetchone()
+    conn.close()
     
-    if success:
-        return jsonify({"success": True, "msg": "节点已成功创建并运行"})
-    else:
-        return jsonify({"success": False, "msg": "数据库写入成功，但底层进程拉起失败"})
+    if not row: return jsonify({"success": False, "msg": "未找到该节点"})
+    
+    old_secret = row['secret']
+    status = row['status']
+    new_secret = custom_secret if custom_secret else old_secret
+    secret_changed = (new_secret != old_secret)
+
+    if secret_changed and status == 'running':
+        run_executor('stop', port)
+
+    with db_lock:
+        try:
+            write_conn = get_db()
+            write_cursor = write_conn.cursor()
+            write_cursor.execute('''
+                UPDATE mg_nodes 
+                SET limit_gb=?, reset_cycle=?, expiry_date=?, secret=?
+                WHERE port=?
+            ''', (limit_gb, reset_cycle, expiry_date, new_secret, port))
+            
+            # 如果处于限制状态被编辑，先假定解封，交由巡检管家再次裁定
+            if status in ['blocked', 'expired']:
+                write_cursor.execute("UPDATE mg_nodes SET status='running' WHERE port=?", (port,))
+                status = 'running'
+                unblock_port(port)
+                
+            write_conn.commit()
+            write_conn.close()
+        except sqlite3.OperationalError as e:
+            return jsonify({"success": False, "msg": f"数据库忙: {e}"})
+            
+    if status == 'running':
+        unblock_port(port)
+        run_executor('start', port, new_secret)
+            
+    return jsonify({"success": True, "msg": "节点配置已修改"})
 
 @app.route('/mg-api/node/toggle', methods=['POST'])
 @login_required
@@ -303,15 +358,13 @@ def toggle_node():
     port = int(data.get('port'))
     action = data.get('action') 
     
-    # 读操作不在锁内
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT secret, status FROM mg_nodes WHERE port=?", (port,))
     row = c.fetchone()
     conn.close()
     
-    if not row:
-        return jsonify({"success": False, "msg": "未找到该节点"})
+    if not row: return jsonify({"success": False, "msg": "未找到该节点"})
     
     status = row['status']
     secret = row['secret']
@@ -326,16 +379,12 @@ def toggle_node():
     else:
         return jsonify({"success": True, "msg": "状态无需变更"})
 
-    # 【修复3】单独用锁包裹修改操作，随开随关
     with db_lock:
-        try:
-            write_conn = get_db()
-            write_cursor = write_conn.cursor()
-            write_cursor.execute("UPDATE mg_nodes SET status=? WHERE port=?", (new_status, port))
-            write_conn.commit()
-            write_conn.close()
-        except sqlite3.OperationalError as e:
-            return jsonify({"success": False, "msg": f"数据库忙，更新状态失败: {str(e)}"})
+        write_conn = get_db()
+        write_cursor = write_conn.cursor()
+        write_cursor.execute("UPDATE mg_nodes SET status=? WHERE port=?", (new_status, port))
+        write_conn.commit()
+        write_conn.close()
     
     return jsonify({"success": True, "msg": f"节点已{ '启动' if new_status == 'running' else '停止' }"})
 
@@ -343,51 +392,36 @@ def toggle_node():
 @login_required
 def delete_node():
     port = int(request.json.get('port'))
-    
     run_executor('delete', port)
     remove_iptables_rules(port)
-    
     with db_lock:
         conn = get_db()
         c = conn.cursor()
         c.execute("DELETE FROM mg_nodes WHERE port=?", (port,))
         conn.commit()
         conn.close()
-        
-    return jsonify({"success": True, "msg": "节点已彻底删除"})
+    return jsonify({"success": True, "msg": "节点已删除"})
 
 @app.route('/mg-api/node/reset_traffic', methods=['POST'])
 @login_required
 def reset_traffic():
     port = int(request.json.get('port'))
-    
     remove_iptables_rules(port)
     setup_iptables_monitor(port)
-    
     with db_lock:
         conn = get_db()
         c = conn.cursor()
         c.execute("UPDATE mg_nodes SET used_bytes=0 WHERE port=?", (port,))
         conn.commit()
         conn.close()
-        
-    return jsonify({"success": True, "msg": "流量已重置清零"})
+    return jsonify({"success": True, "msg": "流量已清零"})
 
 @app.route('/')
-def index():
-    return send_from_directory('.', 'index.html')
-
+def index(): return send_from_directory('.', 'index.html')
 
 if __name__ == '__main__':
     init_db()
-    
-    # 将原来的 monitor_thread 替换为新的 master_monitor_loop
     monitor_thread = threading.Thread(target=master_monitor_loop)
     monitor_thread.daemon = True
     monitor_thread.start()
-    
-    print(f"[MG-Panel] Starting private console on port {WEB_PORT}...")
-    app.run(host='0.0.0.0', port=WEB_PORT, debug=False, threaded=True)
-    
-    print(f"[MG-Panel] Starting private console on port {WEB_PORT}...")
     app.run(host='0.0.0.0', port=WEB_PORT, debug=False, threaded=True)
