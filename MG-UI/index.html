@@ -24,13 +24,16 @@
         .el-table { --el-table-border-color: #363637; --el-table-bg-color: #1D1E1F; --el-table-tr-bg-color: #1D1E1F; --el-table-header-bg-color: #262728; }
         .traffic-box { display: flex; flex-direction: column; gap: 6px; }
         .info-text { font-size: 12px; color: #A3A6AD; margin-top: 4px; }
-        .link-tag { cursor: pointer; transition: 0.3s; }
-        .link-tag:hover { opacity: 0.8; }
         .btn-group { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+        
+        /* 详情弹窗自定义样式 */
+        .el-descriptions__label { width: 130px; font-weight: bold; color: #E5EAF3 !important; }
+        .break-text { word-break: break-all; white-space: normal; line-height: 1.5; }
     </style>
 </head>
 <body>
     <div id="app" v-cloak>
+        <!-- 登录页 -->
         <div v-if="!isLoggedIn" class="login-wrapper">
             <el-card class="login-card" shadow="never">
                 <div class="login-header">🛡️ MG Console</div>
@@ -44,6 +47,7 @@
             </el-card>
         </div>
 
+        <!-- 面板主页 -->
         <div v-else class="dashboard">
             <div class="nav-header">
                 <div class="brand"><el-icon><Platform /></el-icon> MG 生产级中控台</div>
@@ -94,31 +98,23 @@
                     </template>
                 </el-table-column>
 
+                <!-- 【修改点 1】修改按钮文字为“查看”，并绑定打开详情弹窗事件 -->
                 <el-table-column label="直连配置" width="110" align="center">
                     <template #default="scope">
-                        <el-tooltip content="点击复制链接" placement="top">
-                            <el-tag class="link-tag" type="warning" @click="copyLink(scope.row.link)"><el-icon><Document-Copy /></el-icon> 复制</el-tag>
-                        </el-tooltip>
+                        <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">
+                            <el-icon><View /></el-icon>&nbsp;查看
+                        </el-button>
                     </template>
                 </el-table-column>
 
                 <el-table-column label="操作" width="360" align="center" fixed="right">
                     <template #default="scope">
                         <div class="btn-group">
-                            <!-- 启停 -->
                             <el-button v-if="scope.row.status === 'running'" type="warning" size="small" @click="toggleNode(scope.row.port, 'stop')">暂停</el-button>
                             <el-button v-else type="success" size="small" @click="toggleNode(scope.row.port, 'start')">启动</el-button>
-                            
-                            <!-- 新增：一键续费 -->
                             <el-button type="success" plain size="small" @click="renewNode(scope.row.port)"><el-icon><Calendar /></el-icon>续费</el-button>
-
-                            <!-- 修改按钮外观，增加清晰文字 -->
                             <el-button type="primary" size="small" @click="openEditDialog(scope.row)"><el-icon><Edit /></el-icon>编辑</el-button>
-                            
-                            <!-- 修复 1：加上“清零”文字，并去掉容易变空的 plain 样式影响 -->
                             <el-button type="info" size="small" @click="resetTraffic(scope.row.port)"><el-icon><RefreshLeft /></el-icon>清零</el-button>
-
-                            <!-- 删除 -->
                             <el-popconfirm title="彻底删除此节点？" @confirm="deleteNode(scope.row.port)" confirm-button-type="danger">
                                 <template #reference><el-button type="danger" size="small"><el-icon><Delete /></el-icon></el-button></template>
                             </el-popconfirm>
@@ -137,7 +133,6 @@
                 <el-form-item label="自定义密钥">
                     <el-input v-model="form.secret" placeholder="留空则由系统自动生成"></el-input>
                 </el-form-item>
-                <!-- 修复 2：默认 1000GB 限额 -->
                 <el-form-item label="月流量限额 (GB)">
                     <el-input-number v-model="form.limit_gb" :min="0.1" :step="100" style="width: 100%;"></el-input-number>
                 </el-form-item>
@@ -161,11 +156,45 @@
                 </span>
             </template>
         </el-dialog>
+
+        <!-- 【修改点 2 & 3 & 4】新增详情弹窗 -->
+        <el-dialog v-model="detailsDialogVisible" title="📄 节点配置详情" width="500px" center custom-class="dark-dialog">
+            <el-descriptions :column="1" border size="default" direction="horizontal">
+                <el-descriptions-item label="服务器 IP">
+                    {{ currentDetailNode.server_ip }}
+                </el-descriptions-item>
+                <el-descriptions-item label="监听端口">
+                    {{ currentDetailNode.port }}
+                </el-descriptions-item>
+                <el-descriptions-item label="到期时间">
+                    <span style="color: #E6A23C; font-weight: bold;">
+                        {{ formatShortDate(currentDetailNode.expiry_date) }}
+                    </span>
+                </el-descriptions-item>
+                <el-descriptions-item label="MTProxy Secret">
+                    <div class="break-text" style="color: #909399;">{{ currentDetailNode.secret }}</div>
+                </el-descriptions-item>
+                <el-descriptions-item label="TG 一键链接">
+                    <div class="break-text" style="color: #67C23A; font-weight: 500;">
+                        {{ currentDetailNode.link }}
+                    </div>
+                </el-descriptions-item>
+            </el-descriptions>
+            <template #footer>
+                <span class="dialog-footer">
+                    <el-button @click="detailsDialogVisible = false">取消</el-button>
+                    <el-button type="success" @click="copyAndClose(currentDetailNode.link)">
+                        <el-icon><Document-Copy /></el-icon>&nbsp;复制一键链接
+                    </el-button>
+                </span>
+            </template>
+        </el-dialog>
+
     </div>
 
     <script>
         const { createApp, ref, reactive, onMounted } = Vue;
-        const { ElMessage, ElMessageBox } = ElementPlus; // 引入 MessageBox
+        const { ElMessage, ElMessageBox } = ElementPlus;
 
         axios.interceptors.response.use(response => response, error => {
             if (error.response && error.response.status === 401) {
@@ -188,7 +217,10 @@
                 const dialogVisible = ref(false);
                 const isEditMode = ref(false);
                 
-                // 修复 2：默认 limit_gb 调整为 1000.0
+                // 详情弹窗对应的状态
+                const detailsDialogVisible = ref(false);
+                const currentDetailNode = ref({});
+
                 const form = reactive({ port: 20000, limit_gb: 1000.0, reset_cycle: 'never', expiry_date: '', secret: '' });
                 const nodes = ref([]);
 
@@ -200,12 +232,10 @@
                     return p > 100 ? 100 : p;
                 };
 
-                // 修复 3：精准自然月递增方法（用于前端 UI 默认值）
                 const getFutureNaturalMonthStr = (monthsToAdd) => {
                     const d = new Date();
                     const currentMonth = d.getMonth();
                     d.setMonth(currentMonth + monthsToAdd);
-                    // 容错处理：如 1月31日加1个月，JS自动变3月3日，应修正回2月底
                     if (d.getMonth() !== (currentMonth + monthsToAdd) % 12) {
                         d.setDate(0); 
                     }
@@ -213,12 +243,34 @@
                     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
                 };
 
+                // 【时间截取方法】获取 YYYY-MM-DD
+                const formatShortDate = (dateStr) => {
+                    if (!dateStr) return '永久有效';
+                    return dateStr.split(' ')[0];
+                };
+
+                // 【打开详情弹窗】并做 IP 获取的双保险处理
+                const openDetailsDialog = (row) => {
+                    // 如果后端没有传 server_ip，则通过正则从 link 中自动解析提取
+                    let extractedIp = row.server_ip;
+                    if (!extractedIp && row.link) {
+                        const ipMatch = row.link.match(/server=([^&]+)/);
+                        extractedIp = ipMatch ? ipMatch[1] : '获取失败';
+                    }
+                    
+                    currentDetailNode.value = {
+                        ...row,
+                        server_ip: extractedIp
+                    };
+                    detailsDialogVisible.value = true;
+                };
+
                 const openAddDialog = () => {
                     isEditMode.value = false;
                     form.port = 20000 + Math.floor(Math.random() * 40000);
-                    form.limit_gb = 1000.0; // 默认 1000GB
+                    form.limit_gb = 1000.0; 
                     form.reset_cycle = 'never';
-                    form.expiry_date = getFutureNaturalMonthStr(1); // 默认严格 +1 个自然月
+                    form.expiry_date = getFutureNaturalMonthStr(1);
                     form.secret = '';
                     dialogVisible.value = true;
                 };
@@ -275,7 +327,6 @@
                     } catch (e) {}
                 };
 
-                // 修复 4：新增一键续费方法
                 const renewNode = (port) => {
                     ElMessageBox.prompt('请输入需要续期的月数（按自然月递增）', '节点一键续费', {
                         confirmButtonText: '确认续费',
@@ -289,14 +340,8 @@
                             if (res.data.success) {
                                 ElMessage.success(res.data.msg);
                                 fetchNodes();
-                            } else {
-                                ElMessage.error(res.data.msg);
-                            }
-                        }).catch(() => {
-                            ElMessage.error('续费请求失败');
-                        }).finally(() => {
-                            loading.value = false;
-                        });
+                            } else { ElMessage.error(res.data.msg); }
+                        }).catch(() => { ElMessage.error('续费请求失败'); }).finally(() => { loading.value = false; });
                     }).catch(() => {});
                 };
 
@@ -314,23 +359,32 @@
                     } catch (e) {}
                 };
 
+                // 原有的纯复制函数
                 const copyLink = (text) => {
                     if(navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text).then(() => { ElMessage.success('配置已复制'); });
+                        navigator.clipboard.writeText(text).then(() => { ElMessage.success('配置已复制到剪贴板'); });
                     } else {
                         let ta = document.createElement("textarea");
                         ta.value = text; ta.style.position = "fixed"; ta.style.left = "-999999px";
                         document.body.appendChild(ta); ta.focus(); ta.select();
-                        try { document.execCommand('copy'); ElMessage.success('配置已复制'); } catch (err) {} ta.remove();
+                        try { document.execCommand('copy'); ElMessage.success('配置已复制到剪贴板'); } catch (err) { ElMessage.error('复制失败'); } ta.remove();
                     }
+                };
+
+                // 【修改点 4】弹窗内点击复制后自动关闭弹窗
+                const copyAndClose = (text) => {
+                    copyLink(text);
+                    detailsDialogVisible.value = false;
                 };
 
                 onMounted(() => { isAppMounted.value = true; fetchNodes(); });
 
                 return {
                     isAppMounted, isLoggedIn, loading, actionLoading, loginForm, dialogVisible, isEditMode, form, nodes, customColors,
+                    detailsDialogVisible, currentDetailNode, // 详情弹窗参数
                     UserIcon, LockIcon, handleLogin, handleLogout, fetchNodes, openAddDialog, openEditDialog, submitForm,
-                    toggleNode, renewNode, resetTraffic, deleteNode, copyLink, calcPercentage
+                    toggleNode, renewNode, resetTraffic, deleteNode, 
+                    copyLink, copyAndClose, calcPercentage, formatShortDate, openDetailsDialog
                 };
             }
         });
