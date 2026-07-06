@@ -418,6 +418,42 @@ def reset_traffic():
         conn.commit(); conn.close()
     return jsonify({"success": True, "msg": "流量已清零"})
 
+@app.route('/mg-api/settings/bot', methods=['GET'])
+@login_required
+def get_bot_settings():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT key, value FROM mg_settings WHERE key IN ('bot_token', 'admin_id')")
+    rows = c.fetchall()
+    conn.close()
+    
+    data = {'bot_token': '', 'admin_id': ''}
+    for row in rows: data[row['key']] = row['value']
+    return jsonify({"success": True, "data": data})
+
+@app.route('/mg-api/settings/bot', methods=['POST'])
+@login_required
+def set_bot_settings():
+    data = request.json
+    bot_token = data.get('bot_token', '').strip()
+    admin_id = data.get('admin_id', '').strip()
+    
+    with db_lock:
+        conn = get_db()
+        c = conn.cursor()
+        # REPLACE INTO：有则更新，无则插入
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('bot_token', ?)", (bot_token,))
+        c.execute("REPLACE INTO mg_settings (key, value) VALUES ('admin_id', ?)", (admin_id,))
+        conn.commit()
+        conn.close()
+        
+    # 保存配置后，直接杀死旧的机器人进程，如果有 token 则拉起新的
+    subprocess.run("pkill -f mg_bot.py", shell=True)
+    if bot_token:
+        subprocess.run("nohup python3 /root/mg_bot.py > /root/mg_bot.log 2>&1 &", shell=True)
+        
+    return jsonify({"success": True, "msg": "Bot 配置已保存，后台进程已重启生效"})
+
 @app.route('/')
 def index(): return send_from_directory('.', 'index.html')
 
