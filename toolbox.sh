@@ -258,6 +258,17 @@ mtproto_2() {
   install_mtproto_variant "MTProto-2" "$MTPROTO_2_URL" "/usr/local/bin/mtp-2"
 }
 
+# ================= 新增：MG 私有面板调用逻辑 =================
+mg_ui_manage() {
+  header
+  echo -e "${CYAN}安装/管理 MG 私有面板${RESET}"
+  echo
+  echo "正在拉取并启动 MG 专属菜单..."
+  # 统一使用 run_as_root 包装，确保写入 /usr/local/bin 时不会有权限阻挡
+  run_as_root bash -c "curl -sL https://raw.githubusercontent.com/alnawei/sh/main/MG-UI/mgui.sh -o /usr/local/bin/mgui && chmod +x /usr/local/bin/mgui && mgui"
+}
+# ==========================================================
+
 bbr_status() {
   local congestion_algorithm
   local queue_algorithm
@@ -391,6 +402,7 @@ show_menu() {
   echo "4.  BBR 管理"
   echo "5.  默认x-ui"
   echo "6.  MTProto-2"
+  echo "7.  安装/管理 MG 私有面板"   # <--- 新增菜单选项
   echo
   echo "00. 更新脚本"
   echo "0.  退出脚本"
@@ -429,6 +441,7 @@ main() {
       4) bbr_manage ;;
       5) default_xui ;;
       6) mtproto_2 ;;
+      7) mg_ui_manage ;;     # <--- 新增 case 分支
       00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
       *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;
