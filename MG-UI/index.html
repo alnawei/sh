@@ -106,6 +106,27 @@
                     </template>
                 </el-table-column>
 
+                <!-- 操作列：修复清零图标 Refresh 并保持文字对齐 -->
+                <el-table-column label="操作" width="360" align="center" fixed="right">
+                    <template #default="scope">
+                        <div class="btn-group">
+                            <el-button v-if="scope.row.status === 'running'" type="warning" size="small" @click="toggleNode(scope.row.port, 'stop')">暂停</el-button>
+                            <el-button v-else type="success" size="small" @click="toggleNode(scope.row.port, 'start')">启动</el-button>
+                            <el-button type="success" plain size="small" @click="renewNode(scope.row.port)"><el-icon><Calendar /></el-icon>续费</el-button>
+                            <el-button type="primary" size="small" @click="openEditDialog(scope.row)"><el-icon><Edit /></el-icon>编辑</el-button>
+                            
+                            <!-- 修复此处的清零图标为 Refresh，并补全文字 -->
+                            <el-button type="info" size="small" @click="resetTraffic(scope.row.port)">
+                                <el-icon><Refresh /></el-icon>清零
+                            </el-button>
+
+                            <el-popconfirm title="彻底删除此节点？" @confirm="deleteNode(scope.row.port)" confirm-button-type="danger">
+                                <template #reference><el-button type="danger" size="small"><el-icon><Delete /></el-icon></el-button></template>
+                            </el-popconfirm>
+                        </div>
+                    </template>
+                </el-table-column>
+
                 <el-table-column label="操作" width="360" align="center" fixed="right">
                     <template #default="scope">
                         <div class="btn-group">
