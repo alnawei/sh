@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MG Console</title>
-    <!-- Vue3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
     <link rel="stylesheet" href="https://unpkg.com/element-plus/theme-chalk/dark/css-vars.css">
@@ -18,7 +17,7 @@
         .login-wrapper { display: flex; justify-content: center; align-items: center; height: 100vh; }
         .login-card { width: 380px; background: #1D1E1F; border: 1px solid #363637; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
         .login-header { text-align: center; font-size: 24px; font-weight: bold; color: #409EFF; padding: 30px 0 10px 0; letter-spacing: 2px; }
-        .dashboard { padding: 30px 20px; max-width: 1300px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        .dashboard { padding: 30px 20px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
         .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #363637; }
         .brand { font-size: 22px; font-weight: 600; color: #409EFF; display: flex; align-items: center; gap: 8px; }
         .toolbar { margin-bottom: 20px; display: flex; gap: 10px; }
@@ -27,6 +26,7 @@
         .info-text { font-size: 12px; color: #A3A6AD; margin-top: 4px; }
         .link-tag { cursor: pointer; transition: 0.3s; }
         .link-tag:hover { opacity: 0.8; }
+        .btn-group { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
     </style>
 </head>
 <body>
@@ -47,12 +47,12 @@
         <div v-else class="dashboard">
             <div class="nav-header">
                 <div class="brand"><el-icon><Platform /></el-icon> MG 生产级中控台</div>
-                <div><el-button type="danger" plain size="small" @click="handleLogout"><el-icon><Switch-Button /></el-icon>&nbsp;退出登录</el-button></div>
+                <div><el-button type="danger" plain size="small" @click="handleLogout"><el-icon><Switch-Button /></el-icon>&nbsp;退出</el-button></div>
             </div>
 
             <div class="toolbar">
                 <el-button type="primary" @click="openAddDialog"><el-icon><Plus /></el-icon>&nbsp;添加入站规则</el-button>
-                <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh /></el-icon>&nbsp;刷新状态</el-button>
+                <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh /></el-icon>&nbsp;刷新</el-button>
             </div>
 
             <el-table :data="nodes" style="width: 100%; border-radius: 8px; overflow: hidden;" v-loading="loading">
@@ -102,18 +102,27 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column label="操作" width="280" align="center" fixed="right">
+                <el-table-column label="操作" width="360" align="center" fixed="right">
                     <template #default="scope">
-                        <el-button v-if="scope.row.status === 'running'" type="warning" size="small" @click="toggleNode(scope.row.port, 'stop')">暂停</el-button>
-                        <el-button v-else type="success" size="small" @click="toggleNode(scope.row.port, 'start')">启动</el-button>
-                        
-                        <!-- 编辑按钮 -->
-                        <el-button type="primary" size="small" @click="openEditDialog(scope.row)"><el-icon><Edit /></el-icon></el-button>
-                        <el-button type="info" plain size="small" @click="resetTraffic(scope.row.port)"><el-icon><RefreshLeft /></el-icon></el-button>
+                        <div class="btn-group">
+                            <!-- 启停 -->
+                            <el-button v-if="scope.row.status === 'running'" type="warning" size="small" @click="toggleNode(scope.row.port, 'stop')">暂停</el-button>
+                            <el-button v-else type="success" size="small" @click="toggleNode(scope.row.port, 'start')">启动</el-button>
+                            
+                            <!-- 新增：一键续费 -->
+                            <el-button type="success" plain size="small" @click="renewNode(scope.row.port)"><el-icon><Calendar /></el-icon>续费</el-button>
 
-                        <el-popconfirm title="彻底删除此节点？" @confirm="deleteNode(scope.row.port)" confirm-button-type="danger">
-                            <template #reference><el-button type="danger" size="small"><el-icon><Delete /></el-icon></el-button></template>
-                        </el-popconfirm>
+                            <!-- 修改按钮外观，增加清晰文字 -->
+                            <el-button type="primary" size="small" @click="openEditDialog(scope.row)"><el-icon><Edit /></el-icon>编辑</el-button>
+                            
+                            <!-- 修复 1：加上“清零”文字，并去掉容易变空的 plain 样式影响 -->
+                            <el-button type="info" size="small" @click="resetTraffic(scope.row.port)"><el-icon><RefreshLeft /></el-icon>清零</el-button>
+
+                            <!-- 删除 -->
+                            <el-popconfirm title="彻底删除此节点？" @confirm="deleteNode(scope.row.port)" confirm-button-type="danger">
+                                <template #reference><el-button type="danger" size="small"><el-icon><Delete /></el-icon></el-button></template>
+                            </el-popconfirm>
+                        </div>
                     </template>
                 </el-table-column>
             </el-table>
@@ -128,14 +137,15 @@
                 <el-form-item label="自定义密钥">
                     <el-input v-model="form.secret" placeholder="留空则由系统自动生成"></el-input>
                 </el-form-item>
+                <!-- 修复 2：默认 1000GB 限额 -->
                 <el-form-item label="月流量限额 (GB)">
-                    <el-input-number v-model="form.limit_gb" :min="0.1" :step="10" style="width: 100%;"></el-input-number>
+                    <el-input-number v-model="form.limit_gb" :min="0.1" :step="100" style="width: 100%;"></el-input-number>
                 </el-form-item>
                 <el-form-item label="流量重置周期">
                     <el-select v-model="form.reset_cycle" style="width: 100%;">
                         <el-option label="从不重置" value="never"></el-option>
                         <el-option label="每日重置" value="daily"></el-option>
-                        <el-option label="每月初重置" value="monthly"></el-option>
+                        <el-option label="每月自然重置" value="monthly"></el-option>
                     </el-select>
                 </el-form-item>
                 <el-form-item label="到期时间">
@@ -155,7 +165,7 @@
 
     <script>
         const { createApp, ref, reactive, onMounted } = Vue;
-        const { ElMessage } = ElementPlus;
+        const { ElMessage, ElMessageBox } = ElementPlus; // 引入 MessageBox
 
         axios.interceptors.response.use(response => response, error => {
             if (error.response && error.response.status === 401) {
@@ -177,7 +187,9 @@
                 const loginForm = reactive({ username: '', password: '' });
                 const dialogVisible = ref(false);
                 const isEditMode = ref(false);
-                const form = reactive({ port: 20000, limit_gb: 50.0, reset_cycle: 'never', expiry_date: '', secret: '' });
+                
+                // 修复 2：默认 limit_gb 调整为 1000.0
+                const form = reactive({ port: 20000, limit_gb: 1000.0, reset_cycle: 'never', expiry_date: '', secret: '' });
                 const nodes = ref([]);
 
                 const customColors = [{ color: '#67C23A', percentage: 60 }, { color: '#E6A23C', percentage: 90 }, { color: '#F56C6C', percentage: 100 }];
@@ -188,18 +200,25 @@
                     return p > 100 ? 100 : p;
                 };
 
-                const getFutureDateStr = (days) => {
-                    const d = new Date(); d.setDate(d.getDate() + days);
-                    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + 
-                           String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+                // 修复 3：精准自然月递增方法（用于前端 UI 默认值）
+                const getFutureNaturalMonthStr = (monthsToAdd) => {
+                    const d = new Date();
+                    const currentMonth = d.getMonth();
+                    d.setMonth(currentMonth + monthsToAdd);
+                    // 容错处理：如 1月31日加1个月，JS自动变3月3日，应修正回2月底
+                    if (d.getMonth() !== (currentMonth + monthsToAdd) % 12) {
+                        d.setDate(0); 
+                    }
+                    const pad = n => String(n).padStart(2, '0');
+                    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
                 };
 
                 const openAddDialog = () => {
                     isEditMode.value = false;
                     form.port = 20000 + Math.floor(Math.random() * 40000);
-                    form.limit_gb = 50.0;
+                    form.limit_gb = 1000.0; // 默认 1000GB
                     form.reset_cycle = 'never';
-                    form.expiry_date = getFutureDateStr(30);
+                    form.expiry_date = getFutureNaturalMonthStr(1); // 默认严格 +1 个自然月
                     form.secret = '';
                     dialogVisible.value = true;
                 };
@@ -256,6 +275,31 @@
                     } catch (e) {}
                 };
 
+                // 修复 4：新增一键续费方法
+                const renewNode = (port) => {
+                    ElMessageBox.prompt('请输入需要续期的月数（按自然月递增）', '节点一键续费', {
+                        confirmButtonText: '确认续费',
+                        cancelButtonText: '取消',
+                        inputValue: '1',
+                        inputPattern: /^[1-9]\d*$/,
+                        inputErrorMessage: '请输入大于 0 的正整数'
+                    }).then(({ value }) => {
+                        loading.value = true;
+                        axios.post('/mg-api/node/renew', { port: port, months: parseInt(value) }).then(res => {
+                            if (res.data.success) {
+                                ElMessage.success(res.data.msg);
+                                fetchNodes();
+                            } else {
+                                ElMessage.error(res.data.msg);
+                            }
+                        }).catch(() => {
+                            ElMessage.error('续费请求失败');
+                        }).finally(() => {
+                            loading.value = false;
+                        });
+                    }).catch(() => {});
+                };
+
                 const resetTraffic = async (port) => {
                     try {
                         const res = await axios.post('/mg-api/node/reset_traffic', { port });
@@ -286,7 +330,7 @@
                 return {
                     isAppMounted, isLoggedIn, loading, actionLoading, loginForm, dialogVisible, isEditMode, form, nodes, customColors,
                     UserIcon, LockIcon, handleLogin, handleLogout, fetchNodes, openAddDialog, openEditDialog, submitForm,
-                    toggleNode, resetTraffic, deleteNode, copyLink, calcPercentage
+                    toggleNode, renewNode, resetTraffic, deleteNode, copyLink, calcPercentage
                 };
             }
         });
