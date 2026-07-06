@@ -98,7 +98,6 @@
                     </template>
                 </el-table-column>
 
-                <!-- 修复后的直连配置列 -->
                 <el-table-column label="直连配置" width="110" align="center">
                     <template #default="scope">
                         <el-button type="primary" plain size="small" @click="openDetailsDialog(scope.row)">
@@ -107,7 +106,6 @@
                     </template>
                 </el-table-column>
 
-                <!-- 修复后的操作列 -->
                 <el-table-column label="操作" width="360" align="center" fixed="right">
                     <template #default="scope">
                         <div class="btn-group">
@@ -189,7 +187,7 @@
                     <el-button type="success" @click="copyAndClose(currentDetailNode.link)">
                         <el-icon><Link /></el-icon>&nbsp;复制链接
                     </el-button>
-                    <!-- 【修改点】新增复制全部按钮 -->
+                    <!-- 新增复制全部按钮 -->
                     <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">
                         <el-icon><DocumentCopy /></el-icon>&nbsp;复制全部
                     </el-button>
@@ -378,7 +376,7 @@
                     detailsDialogVisible.value = false;
                 };
 
-                // 【修改点】核心排版：拼接全部内容并复制
+                // 核心排版：拼接全部内容并复制
                 const copyAllAndClose = (node) => {
                     const ip = node.server_ip || '';
                     const port = node.port || '';
@@ -387,15 +385,7 @@
                     const expiry = formatShortDate(node.expiry_date);
 
                     // 严格遵守排版规范（全角冒号及指定空行缩进）
-                    const textToCopy = `服务器 IP：${ip}
-监听端口：${port}
-MTProxy Secret：
-${secret}
-
-TG 一键链接：
-${link}
-
-到期时间：${expiry}`;
+                    const textToCopy = `服务器 IP：${ip}\n监听端口：${port}\nMTProxy Secret：\n${secret}\n\nTG 一键链接：\n${link}\n\n到期时间：${expiry}`;
 
                     copyLink(textToCopy);
                     detailsDialogVisible.value = false;
