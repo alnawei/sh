@@ -57,6 +57,8 @@
             <div class="toolbar">
                 <el-button type="primary" @click="openAddDialog"><el-icon><Plus /></el-icon>&nbsp;添加入站规则</el-button>
                 <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh /></el-icon>&nbsp;刷新</el-button>
+                <!-- 【新增】Bot 配置按钮 -->
+                <el-button type="warning" plain @click="openBotDialog"><el-icon><Setting /></el-icon>&nbsp;Bot设置</el-button>
             </div>
 
             <el-table :data="nodes" style="width: 100%; border-radius: 8px; overflow: hidden;" v-loading="loading">
@@ -185,6 +187,25 @@
                     <el-button type="success" @click="copyAndClose(currentDetailNode.link)">复制链接</el-button>
                     <!-- 新增复制全部按钮 -->
                     <el-button type="primary" @click="copyAllAndClose(currentDetailNode)">复制全部</el-button>
+                </span>
+            </template>
+        </el-dialog>
+        <!-- 【新增】Telegram 机器人配置弹窗 -->
+        <el-dialog v-model="botDialogVisible" title="🤖 Telegram 机器人配置" width="450px" center custom-class="dark-dialog">
+            <el-form :model="botForm" label-width="140px" label-position="left">
+                <el-form-item label="机器人密钥 (Token)">
+                    <el-input v-model="botForm.bot_token" type="password" show-password placeholder="在此输入 Bot Token"></el-input>
+                    <div class="info-text">向 Telegram @BotFather 申请获取</div>
+                </el-form-item>
+                <el-form-item label="管理员 ID">
+                    <el-input v-model="botForm.admin_id" placeholder="在此输入你的纯数字 ID"></el-input>
+                    <div class="info-text">你的 TG 数字 ID（通过 @userinfobot 获取），用于拦截非法控制</div>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <span class="dialog-footer">
+                    <el-button @click="botDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="submitBotForm" :loading="botLoading">保存并重启 Bot</el-button>
                 </span>
             </template>
         </el-dialog>
@@ -400,6 +421,41 @@
         app.use(ElementPlus);
         for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component); }
         const appVue = app.mount('#app');
+
+        // 新增：Bot配置相关状态
+                const botDialogVisible = ref(false);
+                const botForm = reactive({ bot_token: '', admin_id: '' });
+                const botLoading = ref(false);
+
+                // 新增：打开弹窗时读取后台配置
+                const openBotDialog = async () => {
+                    try {
+                        const res = await axios.get('/mg-api/settings/bot');
+                        if (res.data.success) {
+                            botForm.bot_token = res.data.data.bot_token;
+                            botForm.admin_id = res.data.data.admin_id;
+                        }
+                    } catch (e) {}
+                    botDialogVisible.value = true;
+                };
+
+                // 新增：提交配置
+                const submitBotForm = async () => {
+                    botLoading.value = true;
+                    try {
+                        const res = await axios.post('/mg-api/settings/bot', botForm);
+                        if (res.data.success) {
+                            ElMessage.success(res.data.msg);
+                            botDialogVisible.value = false;
+                        } else {
+                            ElMessage.error(res.data.msg);
+                        }
+                    } catch (e) {
+                        ElMessage.error('保存失败');
+                    } finally {
+                        botLoading.value = false;
+                    }
+                };
     </script>
 </body>
 </html>
