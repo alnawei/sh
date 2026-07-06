@@ -60,6 +60,7 @@ def init_db():
                       reset_cycle TEXT DEFAULT 'never',
                       expiry_date TEXT DEFAULT '',
                       last_reset_date TEXT DEFAULT '')''')
+        
                       
         c.execute("PRAGMA table_info(mg_nodes)")
         existing_columns = [col['name'] for col in c.fetchall()]
@@ -73,7 +74,8 @@ def init_db():
         for col_name, alter_sql in migrations.items():
             if col_name not in existing_columns:
                 c.execute(alter_sql)
-                
+        # 【新增】创建设置表
+        c.execute('''CREATE TABLE IF NOT EXISTS mg_settings (key TEXT PRIMARY KEY, value TEXT)''')        
         conn.commit()
         conn.close()
 
