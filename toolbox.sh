@@ -5,10 +5,10 @@ set -Eeuo pipefail
 VERSION="0.1.0"
 PROJECT_NAME="KEJI.SH"
 SCRIPT_URL="${SCRIPT_URL:-https://raw.githubusercontent.com/alnawei/sh/main/toolbox.sh}"
-DEFAULT_MTPROTO_URL="${DEFAULT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto/MTP.sh}"
-EDIT_MTPROTO_URL="${EDIT_MTPROTO_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto-edit/MTP.sh}"
+DEFAULT_MG_URL="${DEFAULT_MG_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mg/MTP.sh}"
+EDIT_MG_URL="${EDIT_MG_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mg-edit/MTP.sh}"
 DEFAULT_XUI_URL="${DEFAULT_XUI_URL:-https://raw.githubusercontent.com/alnawei/sh/main/x-ui/XUI.sh}"
-MTPROTO_2_URL="${MTPROTO_2_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mtproto-2/MTP.sh}"
+MG_2_URL="${MG_2_URL:-https://raw.githubusercontent.com/alnawei/sh/main/mg-2/MTP.sh}"
 
 latest_script_url() {
   local separator="?"
@@ -205,7 +205,7 @@ system_clean() {
   pause
 }
 
-install_mtproto_variant() {
+install_mg_variant() {
   local title="$1"
   local source_url="$2"
   local target="$3"
@@ -242,20 +242,20 @@ install_mtproto_variant() {
   run_as_root "$target"
 }
 
-default_mtproto() {
-  install_mtproto_variant "默认MTProto" "$DEFAULT_MTPROTO_URL" "/usr/local/bin/mtp"
+default_mg() {
+  install_mg_variant "默认MG" "$DEFAULT_MG_URL" "/usr/local/bin/mg"
 }
 
-edit_mtproto() {
-  install_mtproto_variant "编辑MTProto" "$EDIT_MTPROTO_URL" "/usr/local/bin/mtp-edit"
+edit_mg() {
+  install_mg_variant "编辑MG" "$EDIT_MG_URL" "/usr/local/bin/mg-edit"
 }
 
 default_xui() {
-  install_mtproto_variant "默认x-ui" "$DEFAULT_XUI_URL" "/usr/local/bin/k-x-ui"
+  install_mg_variant "默认x-ui" "$DEFAULT_XUI_URL" "/usr/local/bin/k-x-ui"
 }
 
-mtproto_2() {
-  install_mtproto_variant "MTProto-2" "$MTPROTO_2_URL" "/usr/local/bin/mtp-2"
+mg_2() {
+  install_mg_variant "MG-2" "$MG_2_URL" "/usr/local/bin/mg-2"
 }
 
 # ================= 新增：MG 私有面板调用逻辑 =================
@@ -396,12 +396,12 @@ bbr_manage() {
 
 show_menu() {
   header
-  echo "1.  默认MTProto"
-  echo "2.  编辑MTProto"
+  echo "1.  默认MG"
+  echo "2.  编辑MG"
   echo "3.  系统清理"
   echo "4.  BBR 管理"
   echo "5.  默认x-ui"
-  echo "6.  MTProto-2"
+  echo "6.  MG-2"
   echo "7.  安装/管理 MG 私有面板"   # <--- 新增菜单选项
   echo
   echo "00. 更新脚本"
@@ -435,12 +435,12 @@ main() {
     show_menu
     read -r -p "请输入你的选择: " choice
     case "$choice" in
-      1) default_mtproto ;;
-      2) edit_mtproto ;;
+      1) default_mg ;;
+      2) edit_mg ;;
       3) system_clean ;;
       4) bbr_manage ;;
       5) default_xui ;;
-      6) mtproto_2 ;;
+      6) mg_2 ;;
       7) mg_ui_manage ;;     # <--- 新增 case 分支
       00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
