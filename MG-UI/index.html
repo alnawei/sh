@@ -6,182 +6,148 @@
     <title>MG Console</title>
     <!-- Vue3 CDN -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- Element Plus 核心 CSS -->
     <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css">
-    <!-- Element Plus 暗黑主题变量 -->
     <link rel="stylesheet" href="https://unpkg.com/element-plus/theme-chalk/dark/css-vars.css">
-    <!-- Element Plus 组件库 -->
     <script src="https://unpkg.com/element-plus/dist/index.full.js"></script>
-    <!-- Element Plus 图标库 -->
     <script src="https://unpkg.com/@element-plus/icons-vue"></script>
-    <!-- Axios -->
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-
     <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            background-color: #141414; /* 极致暗黑底色 */
-            color: #CFD3DC;
-            font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-        }
+        body, html { margin: 0; padding: 0; background-color: #141414; color: #CFD3DC; font-family: sans-serif; }
         #app { min-height: 100vh; display: flex; flex-direction: column; }
         [v-cloak] { display: none; }
-
-        /* 登录页样式 */
         .login-wrapper { display: flex; justify-content: center; align-items: center; height: 100vh; }
         .login-card { width: 380px; background: #1D1E1F; border: 1px solid #363637; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
         .login-header { text-align: center; font-size: 24px; font-weight: bold; color: #409EFF; padding: 30px 0 10px 0; letter-spacing: 2px; }
-
-        /* 控制台主框架样式 */
-        .dashboard { padding: 30px 20px; max-width: 1200px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        .dashboard { padding: 30px 20px; max-width: 1300px; margin: 0 auto; width: 100%; box-sizing: border-box; }
         .nav-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #363637; }
         .brand { font-size: 22px; font-weight: 600; color: #409EFF; display: flex; align-items: center; gap: 8px; }
         .toolbar { margin-bottom: 20px; display: flex; gap: 10px; }
-
-        /* 表格内自定义样式 */
         .el-table { --el-table-border-color: #363637; --el-table-bg-color: #1D1E1F; --el-table-tr-bg-color: #1D1E1F; --el-table-header-bg-color: #262728; }
         .traffic-box { display: flex; flex-direction: column; gap: 6px; }
-        .traffic-text { font-size: 12px; color: #A3A6AD; }
+        .info-text { font-size: 12px; color: #A3A6AD; margin-top: 4px; }
         .link-tag { cursor: pointer; transition: 0.3s; }
         .link-tag:hover { opacity: 0.8; }
     </style>
 </head>
 <body>
     <div id="app" v-cloak>
-        <!-- ================= 登录页面 ================= -->
         <div v-if="!isLoggedIn" class="login-wrapper">
             <el-card class="login-card" shadow="never">
                 <div class="login-header">🛡️ MG Console</div>
                 <div style="padding: 20px;">
                     <el-form @keyup.enter="handleLogin">
-                        <el-form-item>
-                            <el-input v-model="loginForm.username" placeholder="Username" :prefix-icon="UserIcon" size="large"></el-input>
-                        </el-form-item>
-                        <el-form-item>
-                            <el-input v-model="loginForm.password" type="password" placeholder="Password" :prefix-icon="LockIcon" size="large" show-password></el-input>
-                        </el-form-item>
-                        <el-button type="primary" size="large" style="width: 100%; margin-top: 10px;" :loading="loading" @click="handleLogin">
-                            LOGIN
-                        </el-button>
+                        <el-form-item><el-input v-model="loginForm.username" placeholder="Username" :prefix-icon="UserIcon" size="large"></el-input></el-form-item>
+                        <el-form-item><el-input v-model="loginForm.password" type="password" placeholder="Password" :prefix-icon="LockIcon" size="large" show-password></el-input></el-form-item>
+                        <el-button type="primary" size="large" style="width: 100%; margin-top: 10px;" :loading="loading" @click="handleLogin">LOGIN</el-button>
                     </el-form>
                 </div>
             </el-card>
         </div>
 
-        <!-- ================= 主控面板 ================= -->
         <div v-else class="dashboard">
-            <!-- 顶部导航 -->
             <div class="nav-header">
-                <div class="brand">
-                    <el-icon><Platform /></el-icon>
-                    MG 私有节点管控中心
-                </div>
-                <div>
-                    <el-button type="danger" plain size="small" @click="handleLogout">
-                        <el-icon><Switch-Button /></el-icon>&nbsp;退出登录
-                    </el-button>
-                </div>
+                <div class="brand"><el-icon><Platform /></el-icon> MG 生产级中控台</div>
+                <div><el-button type="danger" plain size="small" @click="handleLogout"><el-icon><Switch-Button /></el-icon>&nbsp;退出登录</el-button></div>
             </div>
 
-            <!-- 工具栏 -->
             <div class="toolbar">
-                <el-button type="primary" @click="addDialogVisible = true">
-                    <el-icon><Plus /></el-icon>&nbsp;添加入站规则
-                </el-button>
-                <el-button type="info" plain @click="fetchNodes" :loading="loading">
-                    <el-icon><Refresh /></el-icon>&nbsp;刷新状态
-                </el-button>
+                <el-button type="primary" @click="openAddDialog"><el-icon><Plus /></el-icon>&nbsp;添加入站规则</el-button>
+                <el-button type="info" plain @click="fetchNodes" :loading="loading"><el-icon><Refresh /></el-icon>&nbsp;刷新状态</el-button>
             </div>
 
-            <!-- 节点数据列表 -->
             <el-table :data="nodes" style="width: 100%; border-radius: 8px; overflow: hidden;" v-loading="loading">
-                <el-table-column prop="port" label="入站端口" width="100" align="center">
-                    <template #default="scope">
-                        <strong>{{ scope.row.port }}</strong>
-                    </template>
+                <el-table-column prop="port" label="端口" width="90" align="center">
+                    <template #default="scope"><strong>{{ scope.row.port }}</strong></template>
                 </el-table-column>
                 
-                <el-table-column label="节点状态" width="120" align="center">
+                <el-table-column label="节点状态" width="110" align="center">
                     <template #default="scope">
                         <el-tag v-if="scope.row.status === 'running'" type="success" effect="dark">🟢 运行中</el-tag>
                         <el-tag v-else-if="scope.row.status === 'stopped'" type="info" effect="dark">⚪ 已停止</el-tag>
+                        <el-tag v-else-if="scope.row.status === 'expired'" type="warning" effect="dark">⏳ 已到期</el-tag>
                         <el-tag v-else-if="scope.row.status === 'blocked'" type="danger" effect="dark">🔴 超限阻断</el-tag>
                     </template>
                 </el-table-column>
 
-                <el-table-column label="流量统计 (物理层防作弊)" min-width="250">
+                <el-table-column label="流量统计 (底层防火墙直读)" min-width="220">
                     <template #default="scope">
                         <div class="traffic-box">
-                            <el-progress 
-                                :percentage="calcPercentage(scope.row.used_gb, scope.row.limit_gb)" 
-                                :color="customColors" 
-                                :stroke-width="10" 
-                                text-inside>
-                            </el-progress>
-                            <div class="traffic-text">
-                                已用: {{ scope.row.used_gb }} GB &nbsp;/&nbsp; 限额: {{ scope.row.limit_gb }} GB
+                            <el-progress :percentage="calcPercentage(scope.row.used_gb, scope.row.limit_gb)" :color="customColors" :stroke-width="10" text-inside></el-progress>
+                            <div class="info-text">已用: {{ scope.row.used_gb }} GB &nbsp;/&nbsp; 限额: {{ scope.row.limit_gb }} GB</div>
+                        </div>
+                    </template>
+                </el-table-column>
+
+                <el-table-column label="到期与重置规则" min-width="180">
+                    <template #default="scope">
+                        <div class="info-text">
+                            <div>♻️ 周期: 
+                                <span v-if="scope.row.reset_cycle === 'daily'">每日重置</span>
+                                <span v-else-if="scope.row.reset_cycle === 'monthly'">每月重置</span>
+                                <span v-else>从不自动重置</span>
+                            </div>
+                            <div style="margin-top: 3px;">🕒 到期: 
+                                <span v-if="scope.row.expiry_date">{{ scope.row.expiry_date }}</span>
+                                <span v-else>永久有效</span>
                             </div>
                         </div>
                     </template>
                 </el-table-column>
 
-                <el-table-column label="直连链接" width="120" align="center">
+                <el-table-column label="直连配置" width="110" align="center">
                     <template #default="scope">
-                        <el-tooltip content="点击复制配置链接" placement="top">
-                            <el-tag class="link-tag" type="warning" @click="copyLink(scope.row.link)">
-                                <el-icon><Document-Copy /></el-icon> 复制链接
-                            </el-tag>
+                        <el-tooltip content="点击复制链接" placement="top">
+                            <el-tag class="link-tag" type="warning" @click="copyLink(scope.row.link)"><el-icon><Document-Copy /></el-icon> 复制</el-tag>
                         </el-tooltip>
                     </template>
                 </el-table-column>
 
                 <el-table-column label="操作" width="280" align="center" fixed="right">
                     <template #default="scope">
-                        <!-- 启停开关 -->
-                        <el-button 
-                            v-if="scope.row.status === 'running'" 
-                            type="warning" size="small" 
-                            @click="toggleNode(scope.row.port, 'stop')">
-                            暂停
-                        </el-button>
-                        <el-button 
-                            v-else 
-                            type="success" size="small" 
-                            @click="toggleNode(scope.row.port, 'start')">
-                            启动
-                        </el-button>
+                        <el-button v-if="scope.row.status === 'running'" type="warning" size="small" @click="toggleNode(scope.row.port, 'stop')">暂停</el-button>
+                        <el-button v-else type="success" size="small" @click="toggleNode(scope.row.port, 'start')">启动</el-button>
                         
-                        <!-- 流量清零 -->
-                        <el-button type="primary" plain size="small" @click="resetTraffic(scope.row.port)">
-                            清零流量
-                        </el-button>
+                        <!-- 编辑按钮 -->
+                        <el-button type="primary" size="small" @click="openEditDialog(scope.row)"><el-icon><Edit /></el-icon></el-button>
+                        <el-button type="info" plain size="small" @click="resetTraffic(scope.row.port)"><el-icon><RefreshLeft /></el-icon></el-button>
 
-                        <!-- 彻底删除 -->
-                        <el-popconfirm title="确定彻底删除该节点与底层阻断规则吗？" @confirm="deleteNode(scope.row.port)" confirm-button-text="删除" cancel-button-text="取消" confirm-button-type="danger">
-                            <template #reference>
-                                <el-button type="danger" size="small">删除</el-button>
-                            </template>
+                        <el-popconfirm title="彻底删除此节点？" @confirm="deleteNode(scope.row.port)" confirm-button-type="danger">
+                            <template #reference><el-button type="danger" size="small"><el-icon><Delete /></el-icon></el-button></template>
                         </el-popconfirm>
                     </template>
                 </el-table-column>
             </el-table>
         </div>
 
-        <!-- ================= 添加节点弹窗 ================= -->
-        <el-dialog v-model="addDialogVisible" title="➕ 新增 MG 入站规则" width="400px" center custom-class="dark-dialog">
-            <el-form :model="addForm" label-width="120px" label-position="left">
+        <!-- 聚合弹窗：新增 / 编辑 -->
+        <el-dialog v-model="dialogVisible" :title="isEditMode ? '📝 编辑 MG 入站规则' : '➕ 新增 MG 入站规则'" width="450px" center custom-class="dark-dialog">
+            <el-form :model="form" label-width="120px" label-position="left">
                 <el-form-item label="监听端口">
-                    <el-input-number v-model="addForm.port" :min="1000" :max="65535" style="width: 100%;"></el-input-number>
+                    <el-input-number v-model="form.port" :min="1000" :max="65535" style="width: 100%;" :disabled="isEditMode"></el-input-number>
+                </el-form-item>
+                <el-form-item label="自定义密钥">
+                    <el-input v-model="form.secret" placeholder="留空则由系统自动生成"></el-input>
                 </el-form-item>
                 <el-form-item label="月流量限额 (GB)">
-                    <el-input-number v-model="addForm.limit_gb" :min="0.1" :step="10" style="width: 100%;"></el-input-number>
+                    <el-input-number v-model="form.limit_gb" :min="0.1" :step="10" style="width: 100%;"></el-input-number>
+                </el-form-item>
+                <el-form-item label="流量重置周期">
+                    <el-select v-model="form.reset_cycle" style="width: 100%;">
+                        <el-option label="从不重置" value="never"></el-option>
+                        <el-option label="每日重置" value="daily"></el-option>
+                        <el-option label="每月初重置" value="monthly"></el-option>
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="到期时间">
+                    <el-date-picker v-model="form.expiry_date" type="datetime" placeholder="留空则永久有效" value-format="YYYY-MM-DD HH:mm:ss" style="width: 100%;"></el-date-picker>
                 </el-form-item>
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
-                    <el-button @click="addDialogVisible = false">取消</el-button>
-                    <el-button type="primary" @click="addNode" :loading="actionLoading">确认创建</el-button>
+                    <el-button @click="dialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="submitForm" :loading="actionLoading">
+                        {{ isEditMode ? '保存修改' : '确认创建' }}
+                    </el-button>
                 </span>
             </template>
         </el-dialog>
@@ -191,40 +157,30 @@
         const { createApp, ref, reactive, onMounted } = Vue;
         const { ElMessage } = ElementPlus;
 
-        // Axios 拦截器处理未登录
         axios.interceptors.response.use(response => response, error => {
             if (error.response && error.response.status === 401) {
                 appVue.isLoggedIn = false;
-                if(appVue.isAppMounted) {
-                    ElMessage.error('身份验证已过期，请重新登录');
-                }
+                if(appVue.isAppMounted) ElMessage.error('请重新登录');
             }
             return Promise.reject(error);
         });
 
         const app = createApp({
             setup() {
-                // 图标引入
                 const UserIcon = ElementPlusIconsVue.User;
                 const LockIcon = ElementPlusIconsVue.Lock;
-
-                // 状态
                 const isAppMounted = ref(false);
                 const isLoggedIn = ref(false);
                 const loading = ref(false);
                 const actionLoading = ref(false);
                 
                 const loginForm = reactive({ username: '', password: '' });
-                const addDialogVisible = ref(false);
-                const addForm = reactive({ port: 20000, limit_gb: 50.0 });
+                const dialogVisible = ref(false);
+                const isEditMode = ref(false);
+                const form = reactive({ port: 20000, limit_gb: 50.0, reset_cycle: 'never', expiry_date: '', secret: '' });
                 const nodes = ref([]);
 
-                // 进度条颜色分级：绿 -> 黄 -> 红
-                const customColors = [
-                    { color: '#67C23A', percentage: 60 },
-                    { color: '#E6A23C', percentage: 90 },
-                    { color: '#F56C6C', percentage: 100 }
-                ];
+                const customColors = [{ color: '#67C23A', percentage: 60 }, { color: '#E6A23C', percentage: 90 }, { color: '#F56C6C', percentage: 100 }];
 
                 const calcPercentage = (used, limit) => {
                     if (!limit || limit <= 0) return 0;
@@ -232,20 +188,38 @@
                     return p > 100 ? 100 : p;
                 };
 
-                // API 调用封装
+                const getFutureDateStr = (days) => {
+                    const d = new Date(); d.setDate(d.getDate() + days);
+                    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + 
+                           String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ':' + String(d.getSeconds()).padStart(2,'0');
+                };
+
+                const openAddDialog = () => {
+                    isEditMode.value = false;
+                    form.port = 20000 + Math.floor(Math.random() * 40000);
+                    form.limit_gb = 50.0;
+                    form.reset_cycle = 'never';
+                    form.expiry_date = getFutureDateStr(30);
+                    form.secret = '';
+                    dialogVisible.value = true;
+                };
+
+                const openEditDialog = (row) => {
+                    isEditMode.value = true;
+                    form.port = row.port;
+                    form.limit_gb = row.limit_gb;
+                    form.reset_cycle = row.reset_cycle || 'never';
+                    form.expiry_date = row.expiry_date || '';
+                    form.secret = row.secret;
+                    dialogVisible.value = true;
+                };
+
                 const fetchNodes = async () => {
                     loading.value = true;
                     try {
                         const res = await axios.get('/mg-api/nodes');
-                        if (res.data.success) {
-                            nodes.value = res.data.data;
-                            isLoggedIn.value = true;
-                        }
-                    } catch (e) {
-                        // 401 interceptor handles it
-                    } finally {
-                        loading.value = false;
-                    }
+                        if (res.data.success) { nodes.value = res.data.data; isLoggedIn.value = true; }
+                    } catch (e) {} finally { loading.value = false; }
                 };
 
                 const handleLogin = async () => {
@@ -253,126 +227,72 @@
                     loading.value = true;
                     try {
                         const res = await axios.post('/mg-api/login', loginForm);
-                        if (res.data.success) {
-                            ElMessage.success('登录成功');
-                            isLoggedIn.value = true;
-                            fetchNodes();
-                        }
-                    } catch (e) {
-                        ElMessage.error(e.response?.data?.msg || '登录失败');
-                    } finally {
-                        loading.value = false;
-                    }
+                        if (res.data.success) { ElMessage.success('登录成功'); isLoggedIn.value = true; fetchNodes(); }
+                    } catch (e) { ElMessage.error('登录失败'); } finally { loading.value = false; }
                 };
 
                 const handleLogout = async () => {
                     await axios.post('/mg-api/logout');
-                    isLoggedIn.value = false;
-                    nodes.value = [];
-                    ElMessage.success('已安全退出');
+                    isLoggedIn.value = false; nodes.value = [];
                 };
 
-                const addNode = async () => {
+                const submitForm = async () => {
                     actionLoading.value = true;
+                    const endpoint = isEditMode.value ? '/mg-api/node/edit' : '/mg-api/node/add';
                     try {
-                        const res = await axios.post('/mg-api/node/add', addForm);
+                        const res = await axios.post(endpoint, form);
                         if (res.data.success) {
                             ElMessage.success(res.data.msg);
-                            addDialogVisible.value = false;
+                            dialogVisible.value = false;
                             fetchNodes();
-                        } else {
-                            ElMessage.error(res.data.msg);
-                        }
-                    } catch (e) {
-                        ElMessage.error('创建异常');
-                    } finally {
-                        actionLoading.value = false;
-                    }
+                        } else { ElMessage.error(res.data.msg); }
+                    } catch (e) { ElMessage.error('操作异常'); } finally { actionLoading.value = false; }
                 };
 
                 const toggleNode = async (port, action) => {
                     try {
                         const res = await axios.post('/mg-api/node/toggle', { port, action });
-                        if (res.data.success) {
-                            ElMessage.success(res.data.msg);
-                            fetchNodes();
-                        } else {
-                            ElMessage.error(res.data.msg);
-                        }
-                    } catch (e) {
-                        ElMessage.error('操作失败');
-                    }
+                        if (res.data.success) { ElMessage.success(res.data.msg); fetchNodes(); }
+                    } catch (e) {}
                 };
 
                 const resetTraffic = async (port) => {
                     try {
                         const res = await axios.post('/mg-api/node/reset_traffic', { port });
-                        if (res.data.success) {
-                            ElMessage.success(`端口 ${port} 流量已重置清零`);
-                            fetchNodes();
-                        }
-                    } catch (e) {
-                        ElMessage.error('重置失败');
-                    }
+                        if (res.data.success) { ElMessage.success(`端口 ${port} 流量已重置清零`); fetchNodes(); }
+                    } catch (e) {}
                 };
 
                 const deleteNode = async (port) => {
                     try {
                         const res = await axios.post('/mg-api/node/delete', { port });
-                        if (res.data.success) {
-                            ElMessage.success(res.data.msg);
-                            fetchNodes();
-                        }
-                    } catch (e) {
-                        ElMessage.error('删除失败');
-                    }
+                        if (res.data.success) { ElMessage.success(res.data.msg); fetchNodes(); }
+                    } catch (e) {}
                 };
 
                 const copyLink = (text) => {
                     if(navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(text).then(() => {
-                            ElMessage.success('代理链接已复制到剪贴板');
-                        });
+                        navigator.clipboard.writeText(text).then(() => { ElMessage.success('配置已复制'); });
                     } else {
-                        // 降级处理
-                        let textArea = document.createElement("textarea");
-                        textArea.value = text;
-                        textArea.style.position = "fixed";
-                        textArea.style.left = "-999999px";
-                        document.body.appendChild(textArea);
-                        textArea.focus();
-                        textArea.select();
-                        try {
-                            document.execCommand('copy');
-                            ElMessage.success('代理链接已复制到剪贴板');
-                        } catch (err) {
-                            ElMessage.error('复制失败，请手动选择复制');
-                        }
-                        textArea.remove();
+                        let ta = document.createElement("textarea");
+                        ta.value = text; ta.style.position = "fixed"; ta.style.left = "-999999px";
+                        document.body.appendChild(ta); ta.focus(); ta.select();
+                        try { document.execCommand('copy'); ElMessage.success('配置已复制'); } catch (err) {} ta.remove();
                     }
                 };
 
-                onMounted(() => {
-                    isAppMounted.value = true;
-                    fetchNodes(); // 自动尝试获取数据，验证 Session
-                });
+                onMounted(() => { isAppMounted.value = true; fetchNodes(); });
 
                 return {
-                    isAppMounted, isLoggedIn, loading, actionLoading,
-                    loginForm, addDialogVisible, addForm, nodes, customColors,
-                    UserIcon, LockIcon,
-                    handleLogin, handleLogout, fetchNodes, addNode,
+                    isAppMounted, isLoggedIn, loading, actionLoading, loginForm, dialogVisible, isEditMode, form, nodes, customColors,
+                    UserIcon, LockIcon, handleLogin, handleLogout, fetchNodes, openAddDialog, openEditDialog, submitForm,
                     toggleNode, resetTraffic, deleteNode, copyLink, calcPercentage
                 };
             }
         });
 
         app.use(ElementPlus);
-        // 全局注册所有 Icon
-        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-            app.component(key, component);
-        }
-        
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) { app.component(key, component); }
         const appVue = app.mount('#app');
     </script>
 </body>
