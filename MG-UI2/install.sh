@@ -1,0 +1,105 @@
+#!/bin/bash
+# MG 终极私有控制台 (Vue3 + 纯血执行器版) 一键安装脚本
+
+echo "=========================================="
+echo "开始安装 MG 终极私有环境 (包含全自动风控预警 Bot)..."
+echo "=========================================="
+
+# 1. 更新系统并安装必要的环境 (确保 daemon 等工具存在)
+apt-get update
+apt-get install -y curl wget python3 python3-pip iptables sqlite3 tar daemon
+
+# 2. 安装 Python 依赖 (一劳永逸适配最新的 Debian/Ubuntu 系统，静默安装)
+echo "正在全自动配置 Python 核心运行环境..."
+pip3 install flask --break-system-packages 2>/dev/null || pip3 install flask
+pip3 install aiogram apscheduler --break-system-packages >/dev/null 2>&1 || pip3 install aiogram apscheduler >/dev/null 2>&1
+
+# 3. 下载核心程序，并进行“私有化改名” (改名为 mg)
+BIN_PATH="/usr/local/bin/mg"
+if [ ! -f "$BIN_PATH" ]; then
+    echo "正在下载并隐蔽化底层核心组件..."
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64) DL_ARCH="amd64" ;;
+        aarch64) DL_ARCH="arm64" ;;
+        *) echo "不支持的架构: $ARCH"; exit 1 ;;
+    esac
+    
+    wget -qO /tmp/mg_core.tar.gz "https://github.com/9seconds/mtg/releases/download/v2.1.7/mtg-2.1.7-linux-${DL_ARCH}.tar.gz"
+    tar -xzf /tmp/mg_core.tar.gz -C /tmp
+    
+    find /tmp -type f -name mtg -exec mv {} "$BIN_PATH" \;
+    chmod +x "$BIN_PATH"
+    rm -rf /tmp/mg_core*
+fi
+
+# 4. 从 GitHub 仓库拉取四大核心模块 (此处之前被误删，现已完美恢复)
+echo "正在拉取控制台与机器人架构文件..."
+BASE_URL="https://raw.githubusercontent.com/alnawei/sh/main/MG-UI"
+
+curl -sL "$BASE_URL/mg_panel.py" -o /root/mg_panel.py
+curl -sL "$BASE_URL/mg_executor.sh" -o /root/mg_executor.sh
+curl -sL "$BASE_URL/index.html" -o /root/index.html
+curl -sL "$BASE_URL/mg_bot.py" -o /root/mg_bot.py
+
+# 赋予执行权限
+chmod +x /root/mg_panel.py
+chmod +x /root/mg_executor.sh
+chmod +x /root/mg_bot.py
+
+# 5. 配置 Systemd 守护进程 (实现后台运行和开机自启)
+echo "配置系统级后台守护进程..."
+
+# Web 面板服务
+cat > /etc/systemd/system/mg-panel.service <<EOF
+[Unit]
+Description=MG Web Panel
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/mg_panel.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Telegram Bot 服务 (此处之前被误删，现已完美恢复)
+cat > /etc/systemd/system/mg-bot.service <<EOF
+[Unit]
+Description=MG Telegram Bot Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/mg_bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 6. 开启并启动全套服务
+systemctl daemon-reload
+
+echo "正在拉起网页管控面板..."
+systemctl enable mg-panel
+systemctl restart mg-panel
+
+echo "正在拉起智能风控预警 Bot..."
+systemctl enable mg-bot
+systemctl restart mg-bot
+
+echo "=========================================="
+echo "✅ 全套环境部署成功！工业级流水线已就绪。"
+echo "👉 请在浏览器访问: http://$(curl -s4 ip.sb):8888"
+echo " (请确保服务器和 1Panel 防火墙已放行 8888 端口)"
+echo " (请登录网页端，在「Bot设置」中填入 Token 和 AdminID 激活机器人)"
+echo "=========================================="
