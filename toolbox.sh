@@ -402,7 +402,8 @@ show_menu() {
   echo "4.  BBR 管理"
   echo "5.  默认x-ui"
   echo "6.  MG-2"
-  echo "7.  安装/管理 MG 私有面板"   # <--- 新增菜单选项
+  echo "7.  安装/管理 MG 私有面板"
+  echo "8.  安装 3x-ui 面板"
   echo
   echo "00. 更新脚本"
   echo "0.  退出脚本"
@@ -442,6 +443,7 @@ main() {
       5) default_xui ;;
       6) mg_2 ;;
       7) mg_ui_manage ;;     # <--- 新增 case 分支
+      8) install_3x_ui ;;
       00) update_script ;;
       0) echo "已退出。"; exit 0 ;;
       *) echo -e "${RED}无效选择。${RESET}"; sleep 1 ;;
