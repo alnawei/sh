@@ -393,6 +393,15 @@ bbr_manage() {
     esac
   done
 }
+install_3x_ui() {
+  header
+  echo -e "${CYAN}安装 3x-ui 面板${RESET}"
+  echo
+  echo "正在拉取并执行 3x-ui 安装脚本..."
+  # 注意下方 URL 的结尾已经改成了 3x-ui/install.sh
+  run_as_root bash -c "bash <(curl -Ls https://raw.githubusercontent.com/alnawei/sh/main/3x-ui/install.sh)"
+  pause
+}
 
 show_menu() {
   header
