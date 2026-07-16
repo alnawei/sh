@@ -515,4 +515,13 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    while True:
+        try:
+            asyncio.run(main())
+        except (KeyboardInterrupt, SystemExit):
+            print("[MG Bot] 收到手动停止信号，正在安全退出...")
+            break
+        except Exception as e:
+            print(f"[MG Bot] ⚠️ 发生异常 (可能是网络抖动或 Token 暂时冲突): {e}")
+            print("[MG Bot] ⏳ 系统将在 5 秒后自动重新挂载监听...")
+            time.sleep(5)
