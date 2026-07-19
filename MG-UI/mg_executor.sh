@@ -16,6 +16,7 @@ mkdir -p "$CONFIG_DIR"
 COMMAND=$1
 PORT=$2
 SECRET=$3
+AD_TAG=$4   # 新增：接收第四个参数作为广告 Tag
 
 PID_FILE="${PID_DIR}/mg_${PORT}.pid"
 
@@ -42,9 +43,18 @@ case "$COMMAND" in
         fi
 
         echo "Starting MG instance on port [${PORT}]..."
+        
+        # 🚀 核心修复：如果存在 AD_TAG，则加入 -a 参数启动
+        if [ -n "$AD_TAG" ] && [ "$AD_TAG" != "None" ] && [ "$AD_TAG" != "null" ]; then
+            EXEC_ARGS="simple-run -a $AD_TAG 0.0.0.0:${PORT} ${SECRET}"
+            echo "With Ad Tag: $AD_TAG"
+        else
+            EXEC_ARGS="simple-run 0.0.0.0:${PORT} ${SECRET}"
+        fi
+
         # 使用 start-stop-daemon 后台无感拉起二进制程序
         start-stop-daemon --start --quiet --pidfile "$PID_FILE" --make-pidfile --background \
-            --exec "$BIN_PATH" -- simple-run 0.0.0.0:${PORT} ${SECRET}
+            --exec "$BIN_PATH" -- $EXEC_ARGS
         
         sleep 1
         if is_running; then 
@@ -104,7 +114,7 @@ case "$COMMAND" in
         ;;
 
     *)
-        echo "Usage: $0 {start|stop|delete|status} <PORT> [SECRET]"
+        echo "Usage: $0 {start|stop|delete|status} <PORT> [SECRET] [AD_TAG]"
         exit 1
         ;;
 esac
